@@ -1,8 +1,12 @@
 import { build } from "esbuild";
 
 await build({
-  entryPoints: ["frontend/src/game.ts"],
-  outfile: "static/js/game.bundle.js",
+  entryPoints: {
+    game: "frontend/src/game.ts",
+    theme: "frontend/src/theme.ts",
+  },
+  outdir: "static/js",
+  entryNames: "[name].bundle",
   bundle: true,
   format: "iife",
   target: "es2020",

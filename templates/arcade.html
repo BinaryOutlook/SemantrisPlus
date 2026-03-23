@@ -4,6 +4,23 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Semantris Plus | Iteration Mode</title>
+  <script>
+    (function () {
+      var storedTheme = null;
+
+      try {
+        storedTheme = window.localStorage.getItem("semantris-theme");
+      } catch (error) {
+        storedTheme = null;
+      }
+
+      var theme = storedTheme === "light" || storedTheme === "dark"
+        ? storedTheme
+        : (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+
+      document.documentElement.dataset.theme = theme;
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
@@ -37,9 +54,29 @@
         </article>
       </section>
 
-      <button id="new-game-button" class="command-button command-button--compact" type="button">
-        New game
-      </button>
+      <div class="topbar-actions">
+        <div class="theme-toggle" role="group" aria-label="Color theme">
+          <button
+            type="button"
+            class="theme-toggle__button"
+            data-theme-option="light"
+            aria-pressed="false"
+          >
+            Light
+          </button>
+          <button
+            type="button"
+            class="theme-toggle__button"
+            data-theme-option="dark"
+            aria-pressed="false"
+          >
+            Dark
+          </button>
+        </div>
+        <button id="new-game-button" class="command-button command-button--compact" type="button">
+          New game
+        </button>
+      </div>
     </header>
 
     <section class="game-grid">
@@ -79,11 +116,6 @@
 
       <section class="stage-panel">
         <div class="stage-topline">
-          <div class="stage-copy">
-            <p class="eyebrow">Board</p>
-            <h1 class="stage-title">Pull the target into the clear zone.</h1>
-            <p class="stage-subtitle">The most related words settle lower in the stack.</p>
-          </div>
           <div class="stage-target" aria-live="polite">
             <span class="eyebrow">Target</span>
             <div id="target-value" class="target-word">...</div>
@@ -156,6 +188,10 @@
     </section>
   </div>
 
+  <script
+    defer
+    src="{{ url_for('static', filename='js/theme.bundle.js') }}"
+  ></script>
   <script
     defer
     src="{{ url_for('static', filename='js/game.bundle.js') }}"
