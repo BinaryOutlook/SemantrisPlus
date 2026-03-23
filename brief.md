@@ -16,7 +16,8 @@ Status note: this brief now sits alongside a more current implementation snapsho
 - `game_logic.py`: Pure gameplay rules, board mutation, and run progression.
 - `llm_client.py`: Gemini integration through Google’s Gen AI SDK, structured-output parsing, validation, and fallback behavior.
 - `templates/arcade.html`: HTML shell for the game.
-- `static/css/app.css` and `static/js/game.js`: dedicated frontend assets for layout, styling, state, and animation.
+- `frontend/src/*`: TypeScript source for the interactive game client.
+- `static/css/app.css` and `static/js/game.bundle.js`: frontend styling plus the compiled browser bundle served by Flask.
 - `assets/*.txt`: Vocabulary packs with varying sizes.
 - `testing/api_latency.py`: Ad hoc latency script for provider comparison.
 - `README.md`: primary project overview and setup guide.
@@ -27,7 +28,7 @@ Status note: this brief now sits alongside a more current implementation snapsho
 ### Architectural reality today
 
 - The app is a server-rendered Flask page with a small JSON API surface.
-- Frontend logic lives in dedicated static assets instead of the template.
+- Frontend logic lives in dedicated TypeScript source files compiled into static assets instead of the template.
 - Backend state is stored in Flask session keys.
 - Gemini integration is isolated behind a provider boundary in `llm_client.py`.
 - Gemini responses now use structured JSON output plus strict permutation validation.
@@ -152,7 +153,7 @@ Suggested shape:
 - `llm_client.py`: prompt construction, provider call, parsing, validation, fallback behavior
 - `templates/arcade.html`: HTML shell only
 - `static/css/app.css`: visual system and animation styling
-- `static/js/game.js`: client state, rendering, animation orchestration, API calls
+- `frontend/src/*`: typed client state, rendering, animation orchestration, and API calls compiled into `static/js/game.bundle.js`
 
 This does not need to become an over-engineered framework. It should simply stop mixing unrelated concerns in the same file.
 

@@ -1,0 +1,17 @@
+{
+  "name": "semantris-plus-frontend",
+  "private": true,
+  "scripts": {
+    "build": "npm run build:frontend",
+    "build:frontend": "node scripts/build-frontend.mjs",
+    "check:frontend": "tsc --noEmit",
+    "test:frontend": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "esbuild": "^0.25.12",
+    "jsdom": "^27.0.1",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

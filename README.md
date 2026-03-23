@@ -105,9 +105,11 @@ SemantrisPlus/
 │   └── lite_1.txt
 ├── docs/
 │   └── V0.1.md            # Versioned implementation/update note
+├── frontend/
+│   └── src/               # TypeScript source for the interactive game client
 ├── static/
 │   ├── css/app.css        # Visual system and layout styling
-│   └── js/game.js         # Frontend state, rendering, animation orchestration
+│   └── js/game.bundle.js  # Compiled browser bundle served by Flask
 ├── templates/
 │   └── arcade.html        # HTML shell for the game
 ├── testing/
@@ -122,10 +124,11 @@ SemantrisPlus/
 - Python
 - Flask
 - Jinja templates
-- vanilla JavaScript
+- TypeScript
 - custom CSS
 - Google Gemini API via the Google Gen AI SDK
 - `unittest` for automated tests
+- Vitest for frontend unit and DOM tests
 
 ## Getting Started
 
@@ -133,6 +136,7 @@ SemantrisPlus/
 
 ```bash
 python3 -m pip install -r requirements.txt
+npm install
 ```
 
 ### 2. Configure environment variables
@@ -156,6 +160,7 @@ FLASK_DEBUG="1"
 ### 3. Run the app
 
 ```bash
+npm run build:frontend
 python3 app.py
 ```
 
@@ -193,6 +198,8 @@ This fallback is intentionally simple. It is a resilience feature, not a semanti
 ### Run tests
 
 ```bash
+npm run check:frontend
+npm run test:frontend
 python3 -m unittest discover -s tests
 ```
 

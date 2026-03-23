@@ -25,6 +25,7 @@ arc/
 # Build artifacts
 build/
 dist/
+node_modules/
 *.egg-info/
 
 # Local tooling and OS files
@@ -35,4 +36,3 @@ dist/
 
 # Flask / local runtime
 instance/
-
