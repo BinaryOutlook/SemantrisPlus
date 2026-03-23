@@ -68,10 +68,18 @@ export function initGameController(elements: GameElements): void {
     const payload = await loadGameState();
     updateHud(elements, clientState, payload.state);
     renderBoard(elements, payload.state.board, payload.state);
+    if (payload.state.game_over) {
+      elements.gameOverNewGameButton.focus();
+      return;
+    }
+
     setStatus(elements, "Target ready. Type a clue to pull it toward the clear zone.", "neutral");
   }
 
   async function startNewGame(): Promise<void> {
+    elements.gameOverModal.hidden = true;
+    elements.gameOverModal.setAttribute("aria-hidden", "true");
+    elements.body.classList.remove("has-game-over-modal");
     setBusy(elements, clientState, true);
     try {
       const payload = await createNewGame();
@@ -83,7 +91,11 @@ export function initGameController(elements: GameElements): void {
       setStatus(elements, getErrorMessage(error), "error");
     } finally {
       setBusy(elements, clientState, false);
-      elements.clueInput.focus();
+      if (clientState.currentState?.game_over) {
+        elements.gameOverNewGameButton.focus();
+      } else {
+        elements.clueInput.focus();
+      }
     }
   }
 
@@ -117,6 +129,9 @@ export function initGameController(elements: GameElements): void {
 
   elements.clueForm.addEventListener("submit", submitClue);
   elements.newGameButton.addEventListener("click", () => {
+    void startNewGame();
+  });
+  elements.gameOverNewGameButton.addEventListener("click", () => {
     void startNewGame();
   });
 

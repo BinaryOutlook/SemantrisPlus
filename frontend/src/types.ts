@@ -4,6 +4,7 @@ export interface GameState {
   target_word: string | null;
   turn_count: number;
   started_at_ms: number;
+  ended_at_ms: number | null;
   last_latency_ms: number | null;
   last_provider: string | null;
   used_fallback: boolean;

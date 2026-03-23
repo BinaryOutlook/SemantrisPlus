@@ -19,7 +19,7 @@ from llm_client import build_ranker_from_env, normalize_word
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent
-DEFAULT_VOCAB_FILE = BASE_DIR / "assets" / "general_1.txt"
+DEFAULT_VOCAB_FILE = BASE_DIR / "assets" / "aviation_1.txt"
 VOCAB_FILE = Path(os.getenv("SEMANTRIS_VOCAB_FILE", str(DEFAULT_VOCAB_FILE)))
 
 app = Flask(__name__)
@@ -73,6 +73,7 @@ def serialize_state(state: dict[str, Any]) -> dict[str, Any]:
         "target_word": target_word,
         "turn_count": state["turn_count"],
         "started_at_ms": state["started_at_ms"],
+        "ended_at_ms": state.get("ended_at_ms"),
         "last_latency_ms": state.get("last_latency_ms"),
         "last_provider": state.get("last_provider"),
         "used_fallback": state.get("used_fallback", False),

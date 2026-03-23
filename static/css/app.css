@@ -27,6 +27,9 @@
   --radius-lg: 24px;
   --tower-gap: 0.5rem;
   --tower-row-size: clamp(2.25rem, 2.8vh, 2.9rem);
+  --tower-stage-padding-y: 1.2rem;
+  --danger-zone-rows: 4;
+  --danger-zone-gaps: 3;
 }
 
 * {
@@ -663,7 +666,11 @@ input {
 
 .danger-zone {
   top: auto;
-  height: calc(var(--tower-row-size) * 4 + var(--tower-gap) * 4 + 2.7rem);
+  height: calc(
+    var(--tower-row-size) * var(--danger-zone-rows) +
+    var(--tower-gap) * var(--danger-zone-gaps) +
+    var(--tower-stage-padding-y)
+  );
   background:
     linear-gradient(180deg, rgba(249, 115, 22, 0), rgba(249, 115, 22, 0.12) 42%, rgba(249, 115, 22, 0.16)),
     linear-gradient(180deg, transparent, rgba(249, 115, 22, 0.1));
@@ -686,7 +693,7 @@ input {
   justify-content: flex-end;
   align-items: center;
   gap: var(--tower-gap);
-  padding: 1.2rem 1rem 1.2rem;
+  padding: var(--tower-stage-padding-y) 1rem var(--tower-stage-padding-y);
 }
 
 .effects-layer {
@@ -805,6 +812,47 @@ input {
   color: #b42318;
   background: rgba(244, 67, 54, 0.08);
   border-color: rgba(244, 67, 54, 0.18);
+}
+
+.game-over-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+  background: rgba(15, 23, 42, 0.48);
+  backdrop-filter: blur(10px);
+}
+
+.game-over-modal[hidden] {
+  display: none;
+}
+
+.game-over-card {
+  width: min(100%, 28rem);
+  padding: 1.5rem;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.76);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+.game-over-card__title {
+  margin: 0.45rem 0 0;
+  font-size: clamp(1.9rem, 3vw, 2.4rem);
+  line-height: 1.02;
+  letter-spacing: -0.04em;
+  font-weight: 800;
+}
+
+.game-over-card__message {
+  margin-top: 0.8rem;
+  margin-bottom: 1.2rem;
+}
+
+.page--game.has-game-over-modal {
+  overflow: hidden;
 }
 
 .burst {

@@ -99,6 +99,7 @@ def initialize_game_state(
         "used_mask": used_mask,
         "turn_count": 0,
         "started_at_ms": int(time.time() * 1000),
+        "ended_at_ms": None,
         "last_latency_ms": None,
         "last_provider": None,
         "used_fallback": False,
@@ -173,6 +174,7 @@ def resolve_turn(
             "used_mask": updated_used_mask,
             "turn_count": state["turn_count"] + 1,
             "game_over": not new_board_indices,
+            "ended_at_ms": int(time.time() * 1000) if not new_board_indices else None,
         }
         return TurnResolution(
             state=updated_state,
@@ -188,6 +190,7 @@ def resolve_turn(
         "board_indices": ranked_board_indices,
         "turn_count": state["turn_count"] + 1,
         "game_over": False,
+        "ended_at_ms": None,
     }
     return TurnResolution(
         state=updated_state,

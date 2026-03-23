@@ -145,6 +145,17 @@
     </section>
   </main>
 
+  <div id="game-over-modal" class="game-over-modal" role="dialog" aria-modal="true" aria-hidden="true" hidden>
+    <section class="game-over-card" aria-labelledby="game-over-title">
+      <p class="eyebrow">Run Complete</p>
+      <h2 id="game-over-title" class="game-over-card__title">You won.</h2>
+      <p id="game-over-message" class="deck game-over-card__message"></p>
+      <button id="game-over-new-game-button" class="command-button" type="button">
+        New Game
+      </button>
+    </section>
+  </div>
+
   <script
     defer
     src="{{ url_for('static', filename='js/game.bundle.js') }}"

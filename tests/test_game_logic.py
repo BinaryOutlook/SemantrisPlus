@@ -94,6 +94,35 @@ class GameLogicTests(unittest.TestCase):
         self.assertEqual(turn.state["board_indices"], [0, 1, 2, 4, 3])
         self.assertEqual(turn.state["turn_count"], 5)
 
+    def test_resolve_turn_sets_end_timestamp_when_run_is_cleared(self) -> None:
+        state = {
+            "score": 0,
+            "board_indices": [0],
+            "target_index": 0,
+            "used_mask": add_indices_to_mask(empty_used_mask(), [0]),
+            "turn_count": 0,
+            "started_at_ms": 1,
+            "ended_at_ms": None,
+            "last_latency_ms": None,
+            "last_provider": None,
+            "used_fallback": False,
+            "last_warning": None,
+            "last_clue": None,
+            "game_over": False,
+            "vocabulary_name": "demo.txt",
+        }
+
+        turn = resolve_turn(
+            state=state,
+            ranked_indices_most_to_least=[0],
+            vocabulary_size=1,
+            rng=random.Random(2),
+        )
+
+        self.assertTrue(turn.state["game_over"])
+        self.assertEqual(turn.state["board_indices"], [])
+        self.assertIsNotNone(turn.state["ended_at_ms"])
+
 
 if __name__ == "__main__":
     unittest.main()

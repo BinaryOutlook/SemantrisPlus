@@ -50,6 +50,42 @@ function startTimer(
   }, 1000);
 }
 
+function stopTimer(
+  elements: Pick<GameElements, "timer">,
+  clientState: ClientState,
+  startedAtMs: number,
+  endedAtMs: number | null,
+): void {
+  if (clientState.timerHandle !== null) {
+    window.clearInterval(clientState.timerHandle);
+    clientState.timerHandle = null;
+  }
+
+  elements.timer.textContent = formatElapsed(startedAtMs, endedAtMs ?? Date.now());
+}
+
+function setGameOverModal(
+  elements: Pick<
+    GameElements,
+    "body" | "gameOverModal" | "gameOverTitle" | "gameOverMessage"
+  >,
+  isOpen: boolean,
+  message = "",
+): void {
+  elements.body.classList.toggle("has-game-over-modal", isOpen);
+  elements.gameOverModal.hidden = !isOpen;
+  elements.gameOverModal.setAttribute("aria-hidden", String(!isOpen));
+
+  if (!isOpen) {
+    elements.gameOverTitle.textContent = "You won.";
+    elements.gameOverMessage.textContent = "";
+    return;
+  }
+
+  elements.gameOverTitle.textContent = "You won.";
+  elements.gameOverMessage.textContent = message;
+}
+
 export function updateHud(
   elements: GameElements,
   clientState: ClientState,
@@ -69,13 +105,25 @@ export function updateHud(
   elements.progressValue.textContent = `${state.seen_words} / ${state.total_vocabulary} seen`;
   elements.progressBar.style.width = `${(state.seen_words / Math.max(state.total_vocabulary, 1)) * 100}%`;
 
-  startTimer(elements, clientState, state.started_at_ms);
+  if (state.game_over) {
+    stopTimer(elements, clientState, state.started_at_ms, state.ended_at_ms);
+  } else {
+    startTimer(elements, clientState, state.started_at_ms);
+  }
   setBusy(elements, clientState, false);
 
   if (state.game_over) {
-    setStatus(elements, "Run complete. Start a new game to load a fresh board.", "hit");
+    setStatus(elements, "You cleared the tower. Start a new game to play again.", "hit");
+    setGameOverModal(
+      elements,
+      true,
+      `You cleared the tower in ${elements.timer.textContent}. Start a new game to play again.`,
+    );
     elements.submitButton.textContent = "Run Complete";
     elements.submitButton.disabled = true;
     elements.clueInput.disabled = true;
+    return;
   }
+
+  setGameOverModal(elements, false);
 }

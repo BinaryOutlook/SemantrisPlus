@@ -261,6 +261,25 @@
       elements2.timer.textContent = formatElapsed(startedAtMs);
     }, 1e3);
   }
+  function stopTimer(elements2, clientState, startedAtMs, endedAtMs) {
+    if (clientState.timerHandle !== null) {
+      window.clearInterval(clientState.timerHandle);
+      clientState.timerHandle = null;
+    }
+    elements2.timer.textContent = formatElapsed(startedAtMs, endedAtMs ?? Date.now());
+  }
+  function setGameOverModal(elements2, isOpen, message = "") {
+    elements2.body.classList.toggle("has-game-over-modal", isOpen);
+    elements2.gameOverModal.hidden = !isOpen;
+    elements2.gameOverModal.setAttribute("aria-hidden", String(!isOpen));
+    if (!isOpen) {
+      elements2.gameOverTitle.textContent = "You won.";
+      elements2.gameOverMessage.textContent = "";
+      return;
+    }
+    elements2.gameOverTitle.textContent = "You won.";
+    elements2.gameOverMessage.textContent = message;
+  }
   function updateHud(elements2, clientState, state) {
     clientState.currentState = state;
     elements2.score.textContent = String(state.score);
@@ -274,14 +293,25 @@
     elements2.latency.textContent = state.last_latency_ms ? `${state.last_latency_ms} ms` : "-- ms";
     elements2.progressValue.textContent = `${state.seen_words} / ${state.total_vocabulary} seen`;
     elements2.progressBar.style.width = `${state.seen_words / Math.max(state.total_vocabulary, 1) * 100}%`;
-    startTimer(elements2, clientState, state.started_at_ms);
+    if (state.game_over) {
+      stopTimer(elements2, clientState, state.started_at_ms, state.ended_at_ms);
+    } else {
+      startTimer(elements2, clientState, state.started_at_ms);
+    }
     setBusy(elements2, clientState, false);
     if (state.game_over) {
-      setStatus(elements2, "Run complete. Start a new game to load a fresh board.", "hit");
+      setStatus(elements2, "You cleared the tower. Start a new game to play again.", "hit");
+      setGameOverModal(
+        elements2,
+        true,
+        `You cleared the tower in ${elements2.timer.textContent}. Start a new game to play again.`
+      );
       elements2.submitButton.textContent = "Run Complete";
       elements2.submitButton.disabled = true;
       elements2.clueInput.disabled = true;
+      return;
     }
+    setGameOverModal(elements2, false);
   }
 
   // frontend/src/state.ts
@@ -349,9 +379,16 @@
       const payload = await loadGameState();
       updateHud(elements2, clientState, payload.state);
       renderBoard(elements2, payload.state.board, payload.state);
+      if (payload.state.game_over) {
+        elements2.gameOverNewGameButton.focus();
+        return;
+      }
       setStatus(elements2, "Target ready. Type a clue to pull it toward the clear zone.", "neutral");
     }
     async function startNewGame() {
+      elements2.gameOverModal.hidden = true;
+      elements2.gameOverModal.setAttribute("aria-hidden", "true");
+      elements2.body.classList.remove("has-game-over-modal");
       setBusy(elements2, clientState, true);
       try {
         const payload = await createNewGame();
@@ -363,7 +400,11 @@
         setStatus(elements2, getErrorMessage(error), "error");
       } finally {
         setBusy(elements2, clientState, false);
-        elements2.clueInput.focus();
+        if (clientState.currentState?.game_over) {
+          elements2.gameOverNewGameButton.focus();
+        } else {
+          elements2.clueInput.focus();
+        }
       }
     }
     async function submitClue(event) {
@@ -392,6 +433,9 @@
     }
     elements2.clueForm.addEventListener("submit", submitClue);
     elements2.newGameButton.addEventListener("click", () => {
+      void startNewGame();
+    });
+    elements2.gameOverNewGameButton.addEventListener("click", () => {
       void startNewGame();
     });
     void loadState().catch((error) => {
@@ -428,6 +472,10 @@
       tower: requireElement("tower", documentRef),
       towerStage: requireElement("tower-stage", documentRef),
       effectsLayer: requireElement("effects-layer", documentRef),
+      gameOverModal: requireElement("game-over-modal", documentRef),
+      gameOverTitle: requireElement("game-over-title", documentRef),
+      gameOverMessage: requireElement("game-over-message", documentRef),
+      gameOverNewGameButton: requireElement("game-over-new-game-button", documentRef),
       clueForm: requireElement("clue-form", documentRef),
       clueInput: requireElement("clue-input", documentRef),
       submitButton: requireElement("submit-button", documentRef),
