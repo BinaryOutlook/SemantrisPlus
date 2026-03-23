@@ -1,6 +1,6 @@
 # Semantris Plus
 
-LLM-powered semantic arcade game inspired by the original Semantris concept, rebuilt as a modern, maintainable Flask project.
+LLM-powered semantic arcade game inspired by the original Semantris concept, built as a maintainable Flask application with a TypeScript-powered browser client.
 
 ## Overview
 
@@ -48,7 +48,7 @@ This repo currently uses Gemini as the primary ranking provider and includes a l
 
 ## Project Status
 
-Current status: `v0.1` active prototype with a cleaner architecture and a significantly improved UI foundation.
+Current status: `v0.2` active prototype with a modular Flask backend, a typed frontend client, and a stronger browser-side development workflow.
 
 What is already in place:
 
@@ -56,6 +56,8 @@ What is already in place:
 - explicit JSON API for session state and turns
 - no-repeat word handling until the unseen pool is exhausted
 - improved tower presentation and animation sequencing
+- a TypeScript frontend source tree compiled into a browser bundle
+- frontend type-checking and Vitest coverage for key browser-side logic
 - fallback ranking path for resilience
 - automated tests for gameplay rules, API behavior, and provider fallback behavior
 
@@ -63,29 +65,32 @@ What is still unfinished:
 
 - final game feel polish
 - richer end-of-run UX
+- broader frontend test coverage across full interaction flows
 - leaderboard or persistence systems
 - stronger fallback ranking quality
 - model selection tuning between Gemini Flash-Lite and Flash
 
 ## Architecture
 
-This repository is now structured around clear responsibilities instead of mixing UI, session state, LLM calls, and game rules in a single file.
+This repository is now structured around clear responsibilities instead of mixing UI, session state, LLM calls, build concerns, and game rules in a single file.
 
 ### Runtime flow
 
 1. Flask serves the HTML shell.
-2. The frontend loads current session state from the JSON API.
-3. The player submits a clue.
-4. The backend sends the visible board to the ranking provider.
-5. The ranking result is validated and converted into board mutations.
-6. The frontend animates reorder, removal, collapse, and spawn events.
+2. The browser loads the compiled TypeScript frontend bundle.
+3. The frontend loads current session state from the JSON API.
+4. The player submits a clue.
+5. The backend sends the visible board to the ranking provider.
+6. The ranking result is validated and converted into board mutations.
+7. The frontend animates reorder, removal, collapse, and spawn events.
 
 ### Key design choices
 
 - Gameplay rules are isolated so they can be tested without the web app.
 - LLM interaction is isolated so provider changes do not require rewriting the game loop.
-- Frontend assets live in dedicated static files so the UI can evolve without turning the template into a monolith.
+- The interactive frontend now lives in dedicated TypeScript modules compiled into a served browser bundle.
 - Session state is explicit so the frontend can render the game from stable API payloads.
+- The frontend build and validation steps are small but formalized so browser code can evolve safely.
 
 ## Repository Structure
 
@@ -104,9 +109,15 @@ SemantrisPlus/
 │   ├── general_1.txt
 │   └── lite_1.txt
 ├── docs/
-│   └── V0.1.md            # Versioned implementation/update note
+│   ├── V0.1.md            # Structural cleanup release note
+│   └── V0.2.md            # Frontend TypeScript migration note
 ├── frontend/
 │   └── src/               # TypeScript source for the interactive game client
+├── package.json           # Frontend scripts and dependencies
+├── tsconfig.json          # TypeScript compiler configuration
+├── vitest.config.ts       # Frontend test configuration
+├── scripts/
+│   └── build-frontend.mjs # esbuild entry for browser bundle output
 ├── static/
 │   ├── css/app.css        # Visual system and layout styling
 │   └── js/game.bundle.js  # Compiled browser bundle served by Flask
@@ -124,7 +135,8 @@ SemantrisPlus/
 - Python
 - Flask
 - Jinja templates
-- TypeScript
+- TypeScript for the interactive browser views
+- esbuild for frontend bundling
 - custom CSS
 - Google Gemini API via the Google Gen AI SDK
 - `unittest` for automated tests
@@ -160,11 +172,36 @@ FLASK_DEBUG="1"
 ### 3. Run the app
 
 ```bash
-npm run build:frontend
+npm run build
 python3 app.py
 ```
 
 Open [http://127.0.0.1:5001](http://127.0.0.1:5001), then launch `Iteration Mode` from the landing page.
+
+### 4. Rebuild the frontend after TypeScript changes
+
+If you change anything under `frontend/src/`, rebuild the browser bundle before running or testing the app:
+
+```bash
+npm run build
+```
+
+## Running A Session
+
+For a normal local play session:
+
+```bash
+npm run build
+python3 app.py
+```
+
+For a validation pass before or after changes:
+
+```bash
+npm run check:frontend
+npm run test:frontend
+python3 -m unittest discover -s tests
+```
 
 ## Configuration
 
@@ -203,10 +240,17 @@ npm run test:frontend
 python3 -m unittest discover -s tests
 ```
 
+### Frontend commands
+
+- `npm run build`: compile the TypeScript frontend into the browser bundle served by Flask
+- `npm run check:frontend`: run TypeScript type-checking without emitting files
+- `npm run test:frontend`: run frontend unit and DOM tests with Vitest
+
 ### Supporting documents
 
 - `brief.md`: product brief for future contractors
-- `docs/V0.1.md`: implementation note for the current architectural refresh
+- `docs/V0.1.md`: implementation note for the structural cleanup release
+- `docs/V0.2.md`: implementation note for the frontend TypeScript migration
 - `GeminiMoving.md`: migration evaluation and recommendation memo
 
 ### Code quality goals
@@ -258,7 +302,7 @@ Pull requests and experiments are welcome across:
 - vocabulary packs
 - tests and documentation
 
-If you are extending the codebase structurally, start with `brief.md` and `docs/V0.1.md` so the architecture direction stays consistent.
+If you are extending the codebase structurally, start with `brief.md`, `docs/V0.1.md`, and `docs/V0.2.md` so the architecture direction stays consistent.
 
 ## Notes
 

@@ -17,6 +17,7 @@ __pycache__/
 .coverage
 .coverage.*
 htmlcov/
+coverage/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
@@ -25,8 +26,16 @@ arc/
 # Build artifacts
 build/
 dist/
-node_modules/
 *.egg-info/
+*.tsbuildinfo
+
+# Frontend / Node
+node_modules/
+.npm/
+.vitest/
+# Keep static source assets tracked; ignore only generated frontend bundles.
+static/js/*.bundle.js
+static/js/*.bundle.js.map
 
 # Local tooling and OS files
 .DS_Store

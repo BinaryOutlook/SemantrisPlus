@@ -10,6 +10,26 @@ The format is inspired by Keep a Changelog, adapted for this repo's pace and sco
 
 - No unreleased entries yet.
 
+## [0.2.0] - 2026-03-24
+
+### Added
+
+- Added a TypeScript frontend source tree under `frontend/src/`.
+- Added a frontend build and validation toolchain with `package.json`, `tsconfig.json`, `esbuild`, and Vitest.
+- Added frontend-oriented tests for utility logic and DOM binding behavior.
+- Added [`docs/V0.2.md`](/Users/leoliang/StudyMain/SemantrisPlus/docs/V0.2.md) to document the frontend migration and the new development workflow.
+
+### Changed
+
+- Migrated the interactive browser client from the old `static/js/game.js` path into typed TypeScript modules compiled into `static/js/game.bundle.js`.
+- Updated the Flask game shell to load the compiled TypeScript bundle instead of the handwritten browser script.
+- Updated project documentation so setup, architecture, and development instructions reflect the TypeScript-based frontend workflow.
+
+### Why
+
+- The frontend had grown beyond simple template glue and now relies on a real API contract, richer UI state, and more animation sequencing than untyped JavaScript handled comfortably.
+- Moving to TypeScript was a technical necessity for safer frontend changes, clearer client-server contracts, and a more maintainable path for future UI work.
+
 ## [0.1.2] - 2026-03-24
 
 ### Changed
