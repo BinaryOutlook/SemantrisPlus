@@ -8,7 +8,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Import Gemini + OpenAI clients
-import google.generativeai as genai
+try:
+    from google import genai
+except Exception:  # pragma: no cover - import safety only
+    genai = None
+
 from openai import OpenAI
 
 
@@ -60,22 +64,26 @@ class MockClient(LLMClientBase):
 # -------------------- GEMINI PROVIDER ------------------------
 
 class GeminiClient(LLMClientBase):
-    def __init__(self, model="gemini-2.5-flash-lite-preview-09-2025"):
+    def __init__(self, model="gemini-2.5-flash-lite"):
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
             raise ValueError("GEMINI_API_KEY not set in environment")
+        if genai is None:
+            raise RuntimeError("google-genai is not installed")
 
-        genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel(
-            model_name=model,
-            generation_config={
-                "temperature": 0.0,
-                "max_output_tokens": 20
-            }
-        )
+        self.client = genai.Client(api_key=api_key)
+        self.model = model
+        self.config = {
+            "temperature": 0.0,
+            "max_output_tokens": 20,
+        }
 
     def generate(self, prompt: str) -> str:
-        response = self.model.generate_content(prompt)
+        response = self.client.models.generate_content(
+            model=self.model,
+            contents=prompt,
+            config=self.config,
+        )
         return response.text.strip()
 
 

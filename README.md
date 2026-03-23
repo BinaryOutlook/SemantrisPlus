@@ -57,7 +57,7 @@ What is already in place:
 - no-repeat word handling until the unseen pool is exhausted
 - improved tower presentation and animation sequencing
 - fallback ranking path for resilience
-- automated tests for gameplay rules and API behavior
+- automated tests for gameplay rules, API behavior, and provider fallback behavior
 
 What is still unfinished:
 
@@ -65,7 +65,7 @@ What is still unfinished:
 - richer end-of-run UX
 - leaderboard or persistence systems
 - stronger fallback ranking quality
-- migration from the deprecated Gemini Python SDK to Google’s newer GenAI client
+- model selection tuning between Gemini Flash-Lite and Flash
 
 ## Architecture
 
@@ -93,8 +93,9 @@ This repository is now structured around clear responsibilities instead of mixin
 SemantrisPlus/
 ├── app.py                 # Flask app, route wiring, session serialization
 ├── game_logic.py          # Pure board/session rules
-├── llm_client.py          # Gemini integration, validation, fallback ranking
+├── llm_client.py          # Google Gen AI integration, validation, fallback ranking
 ├── brief.md               # Contractor-facing project brief and roadmap
+├── GeminiMoving.md        # Migration evaluation and decision record
 ├── README.md              # Project overview and setup
 ├── requirements.txt       # Python dependencies
 ├── assets/                # Vocabulary packs
@@ -123,7 +124,7 @@ SemantrisPlus/
 - Jinja templates
 - vanilla JavaScript
 - custom CSS
-- Google Gemini API
+- Google Gemini API via the Google Gen AI SDK
 - `unittest` for automated tests
 
 ## Getting Started
@@ -131,7 +132,7 @@ SemantrisPlus/
 ### 1. Install dependencies
 
 ```bash
-pip install -r requirements.txt
+python3 -m pip install -r requirements.txt
 ```
 
 ### 2. Configure environment variables
@@ -147,7 +148,7 @@ Optional configuration:
 
 ```env
 SEMANTRIS_VOCAB_FILE="assets/general_1.txt"
-GEMINI_MODEL="gemini-2.5-flash-lite-preview-09-2025"
+GEMINI_MODEL="gemini-2.5-flash-lite"
 PORT="5001"
 FLASK_DEBUG="1"
 ```
@@ -155,7 +156,7 @@ FLASK_DEBUG="1"
 ### 3. Run the app
 
 ```bash
-python app.py
+python3 app.py
 ```
 
 Open [http://127.0.0.1:5001](http://127.0.0.1:5001).
@@ -181,7 +182,9 @@ SEMANTRIS_VOCAB_FILE="assets/aviation_1.txt"
 
 ### Ranking provider
 
-The game currently prefers Gemini. If Gemini is unavailable or returns invalid output, the backend falls back to a deterministic local heuristic ranker so the session does not hard-fail.
+The game currently prefers Gemini through Google’s supported `google-genai` client. The backend requests structured JSON output from Gemini and then validates that the ranking is still a correct permutation of the current board before resolving the turn.
+
+If Gemini is unavailable, fails validation, or cannot initialize, the backend falls back to a deterministic local heuristic ranker so the session does not hard-fail.
 
 This fallback is intentionally simple. It is a resilience feature, not a semantic replacement for the primary model.
 
@@ -190,13 +193,14 @@ This fallback is intentionally simple. It is a resilience feature, not a semanti
 ### Run tests
 
 ```bash
-python -m unittest discover -s tests
+python3 -m unittest discover -s tests
 ```
 
 ### Supporting documents
 
 - `brief.md`: product brief for future contractors
 - `docs/V0.1.md`: implementation note for the current architectural refresh
+- `GeminiMoving.md`: migration evaluation and recommendation memo
 
 ### Code quality goals
 
@@ -221,11 +225,11 @@ This repo is aiming for a small but professional standard:
 
 Near-term priorities:
 
-- migrate to the newer Google GenAI SDK
 - improve end-of-run states and summaries
 - strengthen visual polish and motion design
 - add richer difficulty and session options
 - improve fallback ranking quality
+- evaluate whether `gemini-2.5-flash` feels better than `gemini-2.5-flash-lite` for ranking quality
 
 Longer-term ideas:
 

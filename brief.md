@@ -6,25 +6,33 @@ This project is a modern rebuild of the original Semantris arcade idea using con
 
 This brief is written to help future AI contractors work from a shared implementation contract instead of re-discovering the repo from scratch.
 
+Status note: this brief now sits alongside a more current implementation snapshot in `README.md`, `docs/V0.1.md`, and `GeminiMoving.md`. Where this brief discusses future direction, those documents describe the current migrated baseline.
+
 ## 2. Current Repository Snapshot
 
 ### Existing files
 
-- `app.py`: Flask server, Gemini configuration, vocabulary loading, gameplay logic, session mutation, and API behavior are all mixed together.
-- `templates/arcade.html`: Entire UI, styling, animation, and client state live in one template file.
+- `app.py`: Flask server wiring, session serialization, and API behavior.
+- `game_logic.py`: Pure gameplay rules, board mutation, and run progression.
+- `llm_client.py`: Gemini integration through Google’s Gen AI SDK, structured-output parsing, validation, and fallback behavior.
+- `templates/arcade.html`: HTML shell for the game.
+- `static/css/app.css` and `static/js/game.js`: dedicated frontend assets for layout, styling, state, and animation.
 - `assets/*.txt`: Vocabulary packs with varying sizes.
 - `testing/api_latency.py`: Ad hoc latency script for provider comparison.
-- `README.md`: Informal project overview and setup notes.
+- `README.md`: primary project overview and setup guide.
+- `docs/V0.1.md`: implementation note for the structural refresh.
+- `GeminiMoving.md`: migration evaluation and decision memo.
 - `requirements.txt`: Python dependencies.
 
 ### Architectural reality today
 
-- The app is a server-rendered Flask page with one JSON endpoint.
-- Frontend logic is embedded directly inside the template.
+- The app is a server-rendered Flask page with a small JSON API surface.
+- Frontend logic lives in dedicated static assets instead of the template.
 - Backend state is stored in Flask session keys.
-- LLM output parsing is permissive and fragile.
-- There is no real automated test suite.
-- There is no formal product brief, engineering roadmap, or contributor contract.
+- Gemini integration is isolated behind a provider boundary in `llm_client.py`.
+- Gemini responses now use structured JSON output plus strict permutation validation.
+- There is a real automated test suite for gameplay rules, route behavior, and provider fallback behavior.
+- The repo now has project-facing, historical, and migration-specific documentation.
 
 ## 3. Product Direction
 
@@ -61,11 +69,11 @@ The intended result should feel:
 
 ### Engineering/maintainability problems
 
-- `app.py` mixes configuration, domain logic, LLM logic, and route handlers.
-- Frontend code is not separated into reusable assets.
-- There is no pure-domain test coverage for board mutation logic.
-- Configuration is implicit instead of centralized.
-- Documentation is missing a proper roadmap and technical overview.
+- The current fallback ranker is intentionally simple and much weaker than Gemini.
+- Provider behavior still depends on careful prompt and validation design for consistent ranking.
+- Configuration remains light-weight and environment-driven rather than fully centralized.
+- The repo would benefit from continued doc hygiene so future contractors do not rely on stale architectural assumptions.
+- Longer-term product features still need to build on a small but evolving codebase.
 
 ## 5. Non-Negotiable Product Requirements
 
@@ -178,7 +186,7 @@ Response payloads should be explicit enough for the frontend to animate without 
 
 ### Prompting
 
-- Ask for a clean structured ranking response rather than free-form newline output when feasible.
+- Keep the current structured ranking response contract instead of regressing to free-form output.
 - Instruct the model to preserve exact word spellings from the provided list.
 - Keep temperature low for consistency.
 
@@ -199,7 +207,7 @@ This fallback is not meant to replace the LLM, but it is essential for reliabili
 
 ### Provider abstraction
 
-Keep Gemini as the primary provider, but isolate provider configuration so future contractors can add alternatives without rewriting the game loop.
+Keep Gemini as the primary provider, but preserve the current provider isolation so future contractors can add alternatives without rewriting the game loop.
 
 ## 9. Frontend Workstream
 
