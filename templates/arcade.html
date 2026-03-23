@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
-    href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;800&family=Sora:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap"
+    href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700;800&display=swap"
     rel="stylesheet"
   />
   <link
@@ -16,68 +16,37 @@
   />
 </head>
 <body class="page page--game">
-  <div class="page-scanlines" aria-hidden="true"></div>
-  <div class="page-glow page-glow--one" aria-hidden="true"></div>
-  <div class="page-glow page-glow--two" aria-hidden="true"></div>
-
-  <div class="vector-gate vector-gate--left" aria-hidden="true">
-    <span class="vector-gate__line"></span>
-    <span class="vector-gate__line"></span>
-    <span class="vector-gate__line"></span>
-    <span class="vector-gate__line"></span>
-  </div>
-  <div class="vector-gate vector-gate--right" aria-hidden="true">
-    <span class="vector-gate__line"></span>
-    <span class="vector-gate__line"></span>
-    <span class="vector-gate__line"></span>
-    <span class="vector-gate__line"></span>
-  </div>
-
   <main class="game-shell">
     <header class="game-topbar">
-      <a class="ghost-link" href="{{ url_for('index') }}">Mode Select</a>
-      <div class="topbar-center">
-        <span class="mode-chip">Iteration Mode</span>
-        <p class="eyebrow">Semantic arcade stack</p>
+      <div class="topbar-leading">
+        <a class="ghost-link ghost-link--compact" href="{{ url_for('index') }}">Back</a>
+        <div class="topbar-brand">
+          <span class="brand-mark">Semantris Plus</span>
+          <span class="mode-chip">Iteration Mode</span>
+        </div>
       </div>
-      <button id="new-game-button" class="command-button command-button--ghost" type="button">
-        New Run
+
+      <section class="hud-strip" aria-label="Primary game metrics">
+        <article class="hero-metric">
+          <span class="hero-metric__label">Score</span>
+          <strong id="score-value" class="hero-metric__value">0</strong>
+        </article>
+        <article class="hero-metric">
+          <span class="hero-metric__label">Elapsed</span>
+          <strong id="timer-value" class="hero-metric__value hero-metric__value--mono">00:00</strong>
+        </article>
+      </section>
+
+      <button id="new-game-button" class="command-button command-button--compact" type="button">
+        New game
       </button>
     </header>
 
-    <section class="hero-ribbon" aria-label="Primary game metrics">
-      <article class="hero-metric">
-        <span class="hero-metric__label">Score</span>
-        <strong id="score-value" class="hero-metric__value">0</strong>
-      </article>
-
-      <div class="hero-core">
-        <p class="eyebrow">Live semantic cascade</p>
-        <h1 class="hero-title">SEMANTRIS+</h1>
-        <p class="hero-subtitle">
-          Pull the target into the strike tray with one sharp clue at a time.
-        </p>
-      </div>
-
-      <article class="hero-metric">
-        <span class="hero-metric__label">Elapsed</span>
-        <strong id="timer-value" class="hero-metric__value hero-metric__value--mono">00:00</strong>
-      </article>
-    </section>
-
     <section class="game-grid">
       <aside class="side-panel side-panel--left">
-        <section class="panel-card target-lock" aria-live="polite">
-          <div class="target-lock__halo" aria-hidden="true"></div>
-          <div class="target-lock__copy">
-            <p class="eyebrow">Target lock</p>
-            <div id="target-value" class="target-word">...</div>
-          </div>
-        </section>
-
         <section class="panel-card progress-card" aria-label="Vocabulary progress">
           <div class="panel-card__header">
-            <span class="eyebrow">Vocabulary progress</span>
+            <span class="eyebrow">Progress</span>
             <span id="progress-value" class="micro-copy">0 / 0 seen</span>
           </div>
           <div class="progress-track">
@@ -110,21 +79,21 @@
 
       <section class="stage-panel">
         <div class="stage-topline">
-          <div>
-            <p class="eyebrow">Association stack</p>
-            <h2>Bottom-most means most related</h2>
+          <div class="stage-copy">
+            <p class="eyebrow">Board</p>
+            <h1 class="stage-title">Pull the target into the clear zone.</h1>
+            <p class="stage-subtitle">The most related words settle lower in the stack.</p>
           </div>
-          <div class="danger-legend">
-            <span class="danger-legend__line"></span>
-            <span>Strike tray</span>
+          <div class="stage-target" aria-live="polite">
+            <span class="eyebrow">Target</span>
+            <div id="target-value" class="target-word">...</div>
           </div>
         </div>
 
         <div id="tower-stage" class="tower-stage">
           <div class="tower-stage__grid" aria-hidden="true"></div>
-          <div class="tower-stage__aura" aria-hidden="true"></div>
           <div class="danger-zone" aria-hidden="true">
-            <span class="danger-zone__label">Drag the target here to clear</span>
+            <span class="danger-zone__label">Clear zone</span>
           </div>
           <div id="effects-layer" class="effects-layer" aria-hidden="true"></div>
           <div id="tower" class="tower" aria-live="polite"></div>
@@ -132,27 +101,16 @@
       </section>
 
       <aside class="side-panel side-panel--right">
-        <section class="panel-card provider-stack">
-          <div class="panel-card__header">
-            <span class="eyebrow">AI link</span>
-            <span class="micro-copy">Provider telemetry</span>
-          </div>
-          <div class="provider-stack__badges">
-            <span id="provider-badge" class="status-pill status-pill--provider">Loading</span>
-            <span id="latency-value" class="status-pill">-- ms</span>
-          </div>
-        </section>
-
         <section class="panel-card command-card">
           <div class="panel-card__header">
-            <span class="eyebrow">Iteration command</span>
-            <span class="micro-copy">One clue. One reorder.</span>
+            <div>
+              <span class="eyebrow">Clue</span>
+              <h2 class="panel-title">Type one clue to pull the target lower.</h2>
+            </div>
           </div>
 
           <p class="deck">
-            Think of a clue that magnetizes the target downward. Gemini handles
-            the semantic ranking; the tray clears only when the target lands in
-            the bottom four.
+            The most related words settle closest to the clear zone.
           </p>
 
           <form id="clue-form" class="clue-form">
@@ -163,7 +121,7 @@
               type="text"
               autocomplete="off"
               maxlength="120"
-              placeholder="Transmit a clue"
+              placeholder="Type a clue"
             />
             <button id="submit-button" class="command-button" type="submit">
               Send Clue
@@ -171,6 +129,17 @@
           </form>
 
           <div id="status-banner" class="status-banner" aria-live="polite"></div>
+        </section>
+
+        <section class="panel-card provider-stack">
+          <div class="panel-card__header">
+            <span class="eyebrow">Ranking</span>
+            <span class="micro-copy">Current model</span>
+          </div>
+          <div class="provider-stack__badges">
+            <span id="provider-badge" class="status-pill status-pill--provider">Loading</span>
+            <span id="latency-value" class="status-pill">-- ms</span>
+          </div>
         </section>
       </aside>
     </section>

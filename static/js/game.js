@@ -23,11 +23,11 @@ const stateRefs = {
 const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const dangerZoneSize = 4;
 const animationTimings = {
-  miss: 220,
-  reorder: 160,
+  miss: 200,
+  reorder: 180,
   handoff: 20,
-  explode: 120,
-  settle: 180,
+  explode: 150,
+  settle: 200,
 };
 
 let currentState = null;
@@ -57,7 +57,7 @@ function setBusy(nextBusy) {
   stateRefs.submitButton.disabled = nextBusy || (currentState?.game_over ?? false);
   stateRefs.newGameButton.disabled = nextBusy;
   stateRefs.clueInput.disabled = nextBusy || (currentState?.game_over ?? false);
-  stateRefs.submitButton.textContent = nextBusy ? "Routing..." : "Send Clue";
+  stateRefs.submitButton.textContent = nextBusy ? "Ranking..." : "Send Clue";
 }
 
 function setStatus(message, tone = "neutral") {
@@ -102,7 +102,7 @@ function updateHud(state) {
   setBusy(false);
 
   if (state.game_over) {
-    setStatus("Run complete. Start a new game to load a fresh tower.", "hit");
+    setStatus("Run complete. Start a new game to load a fresh board.", "hit");
     stateRefs.submitButton.textContent = "Run Complete";
     stateRefs.submitButton.disabled = true;
     stateRefs.clueInput.disabled = true;
@@ -316,7 +316,7 @@ async function loadState() {
   const payload = await fetchJson("/api/game/state");
   updateHud(payload.state);
   renderBoard(payload.state.board, payload.state);
-  setStatus("Target locked. Transmit a clue and pull it into the strike tray.", "neutral");
+  setStatus("Target ready. Type a clue to pull it toward the clear zone.", "neutral");
 }
 
 async function startNewGame() {
@@ -349,7 +349,7 @@ async function submitClue(event) {
   }
 
   setBusy(true);
-  setStatus("Gemini is rethreading the stack around your clue...", "neutral");
+  setStatus("Ranking the stack around your clue...", "neutral");
 
   try {
     const result = await fetchJson("/api/game/turn", {

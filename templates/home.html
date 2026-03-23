@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
-    href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;800&family=Sora:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap"
+    href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700;800&display=swap"
     rel="stylesheet"
   />
   <link
@@ -16,41 +16,24 @@
   />
 </head>
 <body class="page page--home">
-  <div class="page-scanlines" aria-hidden="true"></div>
-  <div class="page-glow page-glow--one" aria-hidden="true"></div>
-  <div class="page-glow page-glow--two" aria-hidden="true"></div>
-
-  <div class="vector-gate vector-gate--left" aria-hidden="true">
-    <span class="vector-gate__line"></span>
-    <span class="vector-gate__line"></span>
-    <span class="vector-gate__line"></span>
-    <span class="vector-gate__line"></span>
-  </div>
-  <div class="vector-gate vector-gate--right" aria-hidden="true">
-    <span class="vector-gate__line"></span>
-    <span class="vector-gate__line"></span>
-    <span class="vector-gate__line"></span>
-    <span class="vector-gate__line"></span>
-  </div>
-
   <main class="landing-shell">
     <header class="landing-topbar">
       <div class="brand-mark">SEMANTRIS PLUS</div>
-      <div class="landing-kicker">Word association games powered by machine learning</div>
+      <a class="ghost-link ghost-link--compact" href="{{ url_for('iteration_mode') }}">Play now</a>
     </header>
 
     <section class="landing-hero">
       <div class="landing-copy">
-        <p class="eyebrow">Machine-ranked semantic play</p>
-        <h1 class="landing-logo">SEMANTRIS</h1>
+        <p class="eyebrow">LLM-ranked word play</p>
+        <h1 class="landing-logo">Semantris Plus</h1>
         <p class="landing-tag">
-          Fast clue entry, luminous signal design, and a tower that reacts like
-          a live semantic instrument.
+          Type one clue, watch the stack reorder, and pull the target into the
+          clear zone.
         </p>
 
         <div class="landing-chip-row" aria-label="Game highlights">
-          <span class="landing-chip">Gemini-ranked</span>
-          <span class="landing-chip">Half-second motion</span>
+          <span class="landing-chip">Fast reruns</span>
+          <span class="landing-chip">Live ranking</span>
           <span class="landing-chip">Fallback safe</span>
         </div>
       </div>
@@ -58,38 +41,37 @@
       <div class="landing-preview">
         <section class="mode-card">
           <div class="mode-card__header">
-            <p class="eyebrow">Only mode online</p>
+            <p class="eyebrow">Current mode</p>
             <h2>Iteration Mode</h2>
           </div>
 
           <div class="mode-card__body">
             <p class="deck">
               Think fast, send one clue, and bend the stack until the target
-              drops into the strike tray.
+              drops into the clear zone.
             </p>
 
             <ul class="mode-card__points">
               <li class="mode-card__point">Live semantic reordering with Gemini</li>
-              <li class="mode-card__point">Destruction tray with fast cascade timing</li>
+              <li class="mode-card__point">Readable board motion and compact feedback</li>
               <li class="mode-card__point">Adaptive vocab packs and run progression</li>
             </ul>
 
             <div class="mode-card__actions">
               <a class="command-button" href="{{ url_for('iteration_mode') }}">Enter Iteration Mode</a>
-              <a class="ghost-link" href="{{ url_for('iteration_mode') }}">Skip briefing</a>
+              <a class="ghost-link" href="{{ url_for('iteration_mode') }}">Open game</a>
             </div>
           </div>
         </section>
 
         <section class="preview-stage" aria-hidden="true">
-          <div class="preview-stage__reticle"></div>
           <div class="preview-stage__stack">
-            <span class="preview-chip preview-chip--target">Signal</span>
-            <span class="preview-chip">Lantern</span>
-            <span class="preview-chip">Harbor</span>
-            <span class="preview-chip">Cipher</span>
-            <span class="preview-chip preview-chip--tray">Anchor</span>
-            <span class="preview-chip preview-chip--tray">Current</span>
+            <span class="preview-chip">Thunder</span>
+            <span class="preview-chip">Sports</span>
+            <span class="preview-chip">Lake</span>
+            <span class="preview-chip preview-chip--target">Steam</span>
+            <span class="preview-chip preview-chip--tray">Ginger</span>
+            <span class="preview-chip preview-chip--tray">Vineyard</span>
           </div>
           <div class="preview-stage__tray"></div>
         </section>
@@ -98,7 +80,7 @@
 
     <footer class="landing-footer">
       <div class="landing-footer__note">
-        A modern one-mode landing page inspired by the original Semantris arcade presentation.
+        A modern Semantris-style arcade built for fast clue entry and satisfying semantic movement.
       </div>
       <div class="landing-footer__stats">
         <span class="landing-stat">Iteration Mode</span>
