@@ -1,267 +1,198 @@
-import os
-import time
-import random
-import google.generativeai as genai
-from flask import Flask, request, jsonify, render_template, session
-from dotenv import load_dotenv
+from __future__ import annotations
 
-# Load environment variables from .env file (for GEMINI_API_KEY, FLASK_SECRET_KEY)
+import os
+from pathlib import Path
+from typing import Any
+
+from dotenv import load_dotenv
+from flask import Flask, jsonify, render_template, request, session
+
+from game_logic import (
+    DESTRUCTION_ZONE_SIZE,
+    calculate_board_size,
+    count_remaining_words,
+    initialize_game_state,
+    resolve_turn,
+)
+from llm_client import build_ranker_from_env, normalize_word
+
 load_dotenv()
 
-# --- 1. Configuration ---
+BASE_DIR = Path(__file__).resolve().parent
+DEFAULT_VOCAB_FILE = BASE_DIR / "assets" / "general_1.txt"
+VOCAB_FILE = Path(os.getenv("SEMANTRIS_VOCAB_FILE", str(DEFAULT_VOCAB_FILE)))
 
 app = Flask(__name__)
-# SECRET_KEY is required for Flask sessions.
-app.secret_key = os.environ.get('FLASK_SECRET_KEY', os.urandom(24))
+app.secret_key = os.getenv("FLASK_SECRET_KEY") or os.urandom(24)
 
-# Configure Gemini API
-try:
-    genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-except KeyError:
-    print("="*50)
-    print("ERROR: GEMINI_API_KEY environment variable not set.")
-    print("Please set this variable in your .env file or environment.")
-    print("="*50)
-    pass
 
-# --- 2. Game Content ---
-def calculate_board_size(score):
-    """
-    Minimum 5, maximum 20.
-    Board size = min(20, max(5, score//2))
-    """
-    size = max(5, score // 2)
-    return min(size, 22)
-VOCABULARY = []
-VOCAB_FILE = os.path.join('assets', 'aviation_1.txt')
+def load_vocabulary(vocab_file: Path) -> list[str]:
+    if not vocab_file.exists():
+        raise FileNotFoundError(f"Vocabulary file not found: {vocab_file}")
 
-def load_vocabulary():
-    """Loads the vocabulary from the assets file."""
-    global VOCABULARY
-    try:
-        with open(VOCAB_FILE, 'r') as f:
-            VOCABULARY = [line.strip() for line in f if line.strip()]
-        if not VOCABULARY:
-            raise FileNotFoundError("Vocabulary file is empty.")
-        print(f"Successfully loaded {len(VOCABULARY)} words.")
-    except FileNotFoundError:
-        print("="*50)
-        print(f"ERROR: '{VOCAB_FILE}' not found or is empty.")
-        print("Please create it and add words, one per line.")
-        print("Using fallback vocabulary.")
-        print("="*50)
-        VOCABULARY = [
-            "Harbor", "Signal", "Forest", "Circuit", "Embassy", "Runway",
-            "Gallery", "Cipher", "Orbit", "Station", "Contract", "Anchor",
-            "Customs", "Voltage", "Algorithm", "Monument", "Transit",
-            "Mercury", "Market", "Archive", "District", "Theater", "Summit",
-            "Frame", "Delta", "Bridge", "Field", "Carrier", "Memory",
-            "Chain", "Shell", "Module", "Crown", "Line", "Vault"
-        ]
-    except Exception as e:
-        print(f"Error loading vocabulary: {e}")
-        pass
+    deduped_words: list[str] = []
+    seen: set[str] = set()
 
-# --- 3. Gemini LLM Configuration ---
+    with vocab_file.open("r", encoding="utf-8") as handle:
+        for raw_line in handle:
+            word = raw_line.strip()
+            if not word:
+                continue
 
-GEMINI_PROMPT_TEMPLATE = """
-You are the ranking AI for a word association game.
-The user will provide a "Clue" and a "List of Words".
-Your job is to rank all words in the list by their semantic association to the clue, from MOST related to LEAST related.
-Respond with ONLY the ranked list of words, separated by newlines.
-Do not add any explanation, headers, or other text.
+            normalized = normalize_word(word)
+            if normalized in seen:
+                continue
 
-Clue: {clue}
-List of Words:
-{word_list}
+            seen.add(normalized)
+            deduped_words.append(word)
 
-Ranked List:
-"""
+    if not deduped_words:
+        raise ValueError(f"Vocabulary file is empty: {vocab_file}")
 
-generation_config = {
-    "temperature": 0.0,
-    "max_output_tokens": 512, 
-}
+    return deduped_words
 
-try:
-    model = genai.GenerativeModel(
-        model_name="gemini-2.5-flash-lite-preview-09-2025", # Using latest flash model
-        generation_config=generation_config
+
+VOCABULARY = load_vocabulary(VOCAB_FILE)
+RANKER = build_ranker_from_env()
+
+
+def words_for_indices(indices: list[int]) -> list[str]:
+    return [VOCABULARY[index] for index in indices]
+
+
+def serialize_state(state: dict[str, Any]) -> dict[str, Any]:
+    board_words = words_for_indices(state["board_indices"])
+    target_index = state.get("target_index")
+    target_word = VOCABULARY[target_index] if target_index is not None else None
+    remaining_words = count_remaining_words(len(VOCABULARY), state["used_mask"])
+    danger_zone_size = min(DESTRUCTION_ZONE_SIZE, len(board_words))
+
+    return {
+        "score": state["score"],
+        "board": board_words,
+        "target_word": target_word,
+        "turn_count": state["turn_count"],
+        "started_at_ms": state["started_at_ms"],
+        "last_latency_ms": state.get("last_latency_ms"),
+        "last_provider": state.get("last_provider"),
+        "used_fallback": state.get("used_fallback", False),
+        "last_warning": state.get("last_warning"),
+        "last_clue": state.get("last_clue"),
+        "game_over": state.get("game_over", False),
+        "vocabulary_name": state["vocabulary_name"],
+        "board_goal_size": min(calculate_board_size(state["score"]), len(VOCABULARY)),
+        "danger_zone_size": danger_zone_size,
+        "danger_zone_words": board_words[-danger_zone_size:],
+        "remaining_words": remaining_words,
+        "seen_words": len(VOCABULARY) - remaining_words,
+        "total_vocabulary": len(VOCABULARY),
+        "run_exhausted": remaining_words == 0,
+    }
+
+
+def initialize_session() -> dict[str, Any]:
+    state = initialize_game_state(
+        vocabulary_size=len(VOCABULARY),
+        vocabulary_name=VOCAB_FILE.name,
     )
-except Exception as e:
-    print(f"Warning: Could not initialize Gemini model. /rank will fail. Error: {e}")
-    model = None
-
-# --- 4. Helper Functions ---
-
-def get_new_words(current_board, num_to_add):
-    """Gets new random words, ensuring no duplicates."""
-    available_vocab = [w for w in VOCABULARY if w not in current_board]
-    num_possible = len(available_vocab)
-    
-    if num_possible < num_to_add:
-        new_words = random.choices(VOCABULARY, k=num_to_add)
-    else:
-        new_words = random.sample(available_vocab, num_to_add)
-        
-    return new_words
-
-def parse_ranked_list(response_text, current_board):
-    """
-    Parses the LLM's newline-separated list and validates it.
-    Returns the ranked list or None if validation fails.
-    """
-    ranked_words = [word.strip() for word in response_text.strip().split('\n')]
-    
-    if sorted(w.lower() for w in ranked_words) == sorted(w.lower() for w in current_board):
-        return ranked_words
-    else:
-        print("LLM Validation Error:")
-        print(f"  Expected: {sorted(current_board)}")
-        print(f"  Got: {sorted(ranked_words)}")
-        return None
+    session.clear()
+    session.update(state)
+    session.modified = True
+    return state
 
 
-# --- 5. Flask API Endpoints ---
+def current_state() -> dict[str, Any]:
+    if "board_indices" not in session:
+        return initialize_session()
+    return dict(session)
 
-@app.route('/')
-def index():
-    """
-    Serves the main game page.
-    Initializes the game state (score, board, target).
-    """
-    session.clear()  # Start a new game
-    
-    # Initialize score
-    session['score'] = 0
 
-    # Dynamic board size using the scoring function
-    initial_size = calculate_board_size(0)     # score = 0 → minimum 5
-    initial_board = get_new_words([], initial_size)
+@app.get("/")
+def index() -> str:
+    return render_template("arcade.html")
 
-    session['board'] = initial_board
-    session['target_word'] = random.choice(initial_board)
 
-    return render_template(
-        'arcade.html',
-        game_board=session['board'],
-        target_word=session['target_word'],
-        score=session['score']
+@app.get("/api/game/state")
+def game_state() -> Any:
+    state = current_state()
+    return jsonify({"state": serialize_state(state)})
+
+
+@app.post("/api/game/new")
+def new_game() -> Any:
+    state = initialize_session()
+    return jsonify(
+        {
+            "message": "New run started.",
+            "state": serialize_state(state),
+        }
     )
 
-# -----------------------------------------------------------------
-# NOTE: The duplicated index() route that was here has been removed.
-# -----------------------------------------------------------------
 
+@app.post("/api/game/turn")
+def game_turn() -> Any:
+    state = current_state()
+    if state.get("game_over"):
+        return jsonify({"error": "This run is finished. Start a new game to play again."}), 400
 
-@app.route('/rank', methods=['POST'])
-def rank_words():
-    """
-    This is the core "LLM Ranking Engine" API for Arcade Mode.
-    Takes a clue, gets a ranked list, checks for target, and updates score/board.
-    """
-    if not model:
-        return jsonify({'error': 'Gemini model not initialized. Is API key set?'}), 500
-
-    data = request.json
-    clue = data.get('clue')
+    payload = request.get_json(silent=True) or {}
+    clue = str(payload.get("clue", "")).strip()
     if not clue:
-        return jsonify({'error': 'No clue provided'}), 400
+        return jsonify({"error": "Enter a clue before submitting."}), 400
 
-    current_board = session.get('board', [])
-    target_word = session.get('target_word', '')
-    score = session.get('score', 0)
-    
-    if not current_board or not target_word:
-        return jsonify({'error': 'Game session error. Please refresh.'}), 400
+    board_indices = state["board_indices"]
+    board_words = words_for_indices(board_indices)
+    board_lookup = {
+        normalize_word(word): index
+        for index, word in zip(board_indices, board_words)
+    }
 
-    # --- Call Gemini API ---
-    start_time = time.perf_counter()
-    word_list_str = "\n".join(current_board)
-    prompt = GEMINI_PROMPT_TEMPLATE.format(
-        clue=clue,
-        word_list=word_list_str
+    ranking = RANKER.rank_words(clue, board_words)
+    ranked_indices = [board_lookup[normalize_word(word)] for word in ranking.ranked_words]
+    turn = resolve_turn(
+        state=state,
+        ranked_indices_most_to_least=ranked_indices,
+        vocabulary_size=len(VOCABULARY),
     )
-    
-    try:
-        response = model.generate_content(prompt)
-        ranked_list = parse_ranked_list(response.text, current_board)
-        
-        if not ranked_list:
-            raise Exception("AI response was invalid or didn't match the board.")
 
-    except Exception as e:
-        print(f"Gemini API error: {e}")
-        return jsonify({'error': f'Gemini API error: {str(e)}'}), 500
+    updated_state = {
+        **turn.state,
+        "last_latency_ms": ranking.latency_ms,
+        "last_provider": ranking.provider,
+        "used_fallback": ranking.used_fallback,
+        "last_warning": ranking.warning,
+        "last_clue": clue,
+    }
 
-    end_time = time.perf_counter()
-    latency_ms = round((end_time - start_time) * 1000)
+    session.clear()
+    session.update(updated_state)
+    session.modified = True
 
-    # --- Arcade Game Logic ---
-    try:
-        target_index = next(i for i, w in enumerate(ranked_list) if w.lower() == target_word.lower())
-    except StopIteration:
-        return jsonify({'error': f'Target word "{target_word}" not found in AI response.'}), 500
+    return jsonify(
+        {
+            "message": _build_turn_message(turn.resolution, len(turn.words_removed_indices), updated_state),
+            "resolution": turn.resolution,
+            "ranked_board": words_for_indices(turn.ranked_board_indices),
+            "new_board": words_for_indices(turn.new_board_indices),
+            "words_removed": words_for_indices(turn.words_removed_indices),
+            "spawned_words": words_for_indices(turn.spawned_indices),
+            "target_word_before": board_words[board_indices.index(state["target_index"])],
+            "state": serialize_state(updated_state),
+        }
+    )
 
-    # Check if the target is in the bottom 4 (index 0, 1, 2, or 3)
-    # This logic matches your description:
-    # index 0 (most correlated) -> removes 4
-    # index 3 (4th correlated) -> removes 1
-    if 0 <= target_index <= 3:
-        # --- HIT! ---
-        # We want to remove the target *and* all words between it and the 4th-most related.
-        # ranked_list is sorted MOST related (index 0) -> LEAST related
-        # So we remove indices [target_index .. 3] inclusive.
-        num_to_remove = 4 - target_index          # 4, 3, 2, or 1
-        start = target_index                      # ensure target is always removed
-        end = start + num_to_remove               # slice end (exclusive) => up to index 3
-        words_removed = ranked_list[start:end]    # e.g. idx 2 -> remove [2,3]
-        #words
-        
-        score += len(words_removed)
-        
-        words_to_keep = [w for w in current_board if w not in words_removed]
-        desired_size = calculate_board_size(score)
-        missing = max(0, desired_size - len(words_to_keep))
 
-        new_words = get_new_words(words_to_keep, missing)
-        new_board = words_to_keep + new_words
-        
-        new_target = random.choice(new_words) if new_words else random.choice(new_board)
+def _build_turn_message(resolution: str, removed_count: int, state: dict[str, Any]) -> str:
+    if state.get("game_over"):
+        return "Run complete. You cleared the tower."
+    if resolution == "hit":
+        if state["used_mask"] and count_remaining_words(len(VOCABULARY), state["used_mask"]) == 0:
+            return f"Hit. Removed {removed_count} word(s). Final stretch: no unseen words remain."
+        return f"Hit. Removed {removed_count} word(s)."
+    return "Miss. Tower reordered."
 
-        session['board'] = new_board
-        session['score'] = score
-        session['target_word'] = new_target
 
-        return jsonify({
-            'hit': True,
-            'words_removed': words_removed,
-            'new_board': new_board,
-            'new_target': new_target,
-            'new_score': score,
-            'ranked_list': ranked_list, 
-            'latency_ms': latency_ms
-        })
-
-    else:
-        # --- MISS! ---
-        session['board'] = ranked_list
-
-        return jsonify({
-            'hit': False,
-            'words_removed': [],
-            'new_board': ranked_list, 
-            'new_target': target_word, 
-            'new_score': score, 
-            'ranked_list': ranked_list,
-            'latency_ms': latency_ms
-        })
-
-# --- 6. Run the Application ---
-
-if __name__ == '__main__':
-    load_vocabulary() 
-    if not VOCABULARY:
-        print("CRITICAL: No vocabulary loaded. Exiting.")
-    else:
-        app.run(debug=True, port=5001)
+if __name__ == "__main__":
+    debug_mode = os.getenv("FLASK_DEBUG", "1") == "1"
+    port = int(os.getenv("PORT", "5001"))
+    app.run(debug=debug_mode, port=port)

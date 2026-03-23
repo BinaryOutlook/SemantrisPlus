@@ -1,2 +1,37 @@
+# Environment
 .env
+.env.*
 .venv
+venv/
+env/
+
+# Python
+__pycache__/
+*/__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.python-version
+
+# Test and coverage output
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Local tooling and OS files
+.DS_Store
+.idea/
+.vscode/
+*.log
+
+# Flask / local runtime
+instance/
+

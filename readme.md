@@ -1,138 +1,256 @@
-# **LLM-Powered Semantris Tower — A Modern Reimagining**
+# Semantris Plus
 
-This project is a small, experimental re-creation of the brilliant **Semantris** concept.  
-The original Semantris was—and still is—an amazing linguistic puzzle built around clever word association. It helped people *learn wording, unlock creativity, spark intuition,* and generate surprising semantic connections.
+LLM-powered semantic arcade game inspired by the original Semantris concept, rebuilt as a modern, maintainable Flask project.
 
-But it was also a product of its time.
+## Overview
 
-Since the introduction of **ChatGPT-3.5 in late 2022**, the entire world has shifted.  
-AI LLMs have exploded in capability, scale, reasoning power, and sheer cultural impact.  
-With modern models carrying **mountains of knowledge across every domain**, it felt natural to revisit Semantris through the lens of 2025’s LLM era.
+Semantris is still one of the most compelling word game ideas ever made. It turns semantic intuition into visible motion: you type a clue, language itself becomes the game state, and meaning decides what survives.
 
-And so, this project was born — a **lightweight LLM-powered arcade variant** that uses the spirit of Semantris but updates it with modern AI.
+This project exists because I wanted a better Semantris-style experience for the LLM era.
 
+The original idea is still excellent, but modern language models make it possible to revisit that loop with a much broader, more current semantic engine. Instead of relying on older ranking systems, this version uses a contemporary LLM stack to reorder words by association and create a more flexible, extensible foundation for a new arcade interpretation.
 
+Semantris Plus is not trying to pretend it surpasses the original Semantris. The original was a real product built by a strong design and engineering team. This repository is an ambitious small-game project: a playable modern reinterpretation with stronger AI-era semantics, cleaner code structure, and a roadmap toward a more polished game.
 
----
+## Vision
 
-## **🧠 What This Project Does**
-This game uses **Google’s Gemini** LLM to:
+The ambition for this repo is straightforward:
 
-- Rank words by semantic association  
-- Determine hits vs misses  
-- Dynamically reshuffle a tower of words  
-- Reward clever or accurate clues  
-- Enable truly modern semantic reasoning that stays up-to-date with today’s world
+- build a Semantris-like arcade game that feels modern instead of prototype-grade
+- use current LLMs where semantic ranking actually adds value
+- preserve the clarity and immediacy of the original idea
+- make the codebase maintainable enough for future contractors or contributors to extend safely
+- improve both the game feel and the engineering quality at the same time
 
-It is *not* deterministic (even at temperature 0), because LLMs aren’t strict sorting machines.  
-However, for short phrases and word association, the result is **surprisingly consistent and fun**.
+This is intentionally both a game project and a software-structure project.
 
-The implementation includes a small sample vocabulary stored as `.txt` files.  
-Feel free to replace them with **any of your own word lists**:
+## Current Gameplay
 
-- Search for `.txt` in `app.py`
-- Replace with another file in the `assets/` folder
-- Enjoy instant new themes (aviation, cities, sci-fi, geography, etc.)
+The current mode is a tower-based arcade variant:
 
+- the game starts with a tower of words and one highlighted target word
+- the player enters a clue
+- the ranking engine orders the visible words from most related to least related
+- the tower is displayed so the bottom-most word is the most correlated result
+- the bottom four words form the destruction zone
+- if the target lands in that zone, the target and the words between it and the zone boundary are removed
+- score increases by the number of removed words
+- new words drop in from the top
+- the session tracks time, score, turns, and vocabulary progress
 
+## Why LLMs Here
 
----
+Modern LLMs are not deterministic ranking machines, and that matters. Even at low temperature, semantic ordering can still vary.
 
-## **📦 Setup Instructions**
+That said, for short clue-and-word ranking tasks, modern models are strong enough to make this design space genuinely fun again. Their broader world knowledge also makes the game more flexible across themed vocab packs and future content expansions.
 
-1. Install dependencies:
+This repo currently uses Gemini as the primary ranking provider and includes a local heuristic fallback so the game remains playable if the model path fails.
 
-   Use the included `requirements.txt`.
+## Project Status
 
-2. Create a `.env` file in the project root with:
+Current status: `v0.1` active prototype with a cleaner architecture and a significantly improved UI foundation.
 
+What is already in place:
+
+- modularized gameplay logic instead of one monolithic server file
+- explicit JSON API for session state and turns
+- no-repeat word handling until the unseen pool is exhausted
+- improved tower presentation and animation sequencing
+- fallback ranking path for resilience
+- automated tests for gameplay rules and API behavior
+
+What is still unfinished:
+
+- final game feel polish
+- richer end-of-run UX
+- leaderboard or persistence systems
+- stronger fallback ranking quality
+- migration from the deprecated Gemini Python SDK to Google’s newer GenAI client
+
+## Architecture
+
+This repository is now structured around clear responsibilities instead of mixing UI, session state, LLM calls, and game rules in a single file.
+
+### Runtime flow
+
+1. Flask serves the HTML shell.
+2. The frontend loads current session state from the JSON API.
+3. The player submits a clue.
+4. The backend sends the visible board to the ranking provider.
+5. The ranking result is validated and converted into board mutations.
+6. The frontend animates reorder, removal, collapse, and spawn events.
+
+### Key design choices
+
+- Gameplay rules are isolated so they can be tested without the web app.
+- LLM interaction is isolated so provider changes do not require rewriting the game loop.
+- Frontend assets live in dedicated static files so the UI can evolve without turning the template into a monolith.
+- Session state is explicit so the frontend can render the game from stable API payloads.
+
+## Repository Structure
+
+```text
+SemantrisPlus/
+├── app.py                 # Flask app, route wiring, session serialization
+├── game_logic.py          # Pure board/session rules
+├── llm_client.py          # Gemini integration, validation, fallback ranking
+├── brief.md               # Contractor-facing project brief and roadmap
+├── README.md              # Project overview and setup
+├── requirements.txt       # Python dependencies
+├── assets/                # Vocabulary packs
+│   ├── aviation_1.txt
+│   ├── basic_vocab.txt
+│   ├── general_1.txt
+│   └── lite_1.txt
+├── docs/
+│   └── V0.1.md            # Versioned implementation/update note
+├── static/
+│   ├── css/app.css        # Visual system and layout styling
+│   └── js/game.js         # Frontend state, rendering, animation orchestration
+├── templates/
+│   └── arcade.html        # HTML shell for the game
+├── testing/
+│   └── api_latency.py     # Optional provider latency experiment
+└── tests/
+    ├── test_app.py        # API contract tests
+    └── test_game_logic.py # Gameplay rule tests
+```
+
+## Tech Stack
+
+- Python
+- Flask
+- Jinja templates
+- vanilla JavaScript
+- custom CSS
+- Google Gemini API
+- `unittest` for automated tests
+
+## Getting Started
+
+### 1. Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 2. Configure environment variables
+
+Create a `.env` file in the project root:
+
+```env
 GEMINI_API_KEY="YOUR_API_KEY"
 FLASK_SECRET_KEY="YOUR_SECRET_KEY"
+```
 
+Optional configuration:
 
-A free-tier API key from **Google AI Studio** is usually enough for this demo.
+```env
+SEMANTRIS_VOCAB_FILE="assets/general_1.txt"
+GEMINI_MODEL="gemini-2.5-flash-lite-preview-09-2025"
+PORT="5001"
+FLASK_DEBUG="1"
+```
 
+### 3. Run the app
 
+```bash
+python app.py
+```
 
----
+Open [http://127.0.0.1:5001](http://127.0.0.1:5001).
 
-## **🎮 Current State of the Game**
+## Configuration
 
-This is a **quick afternoon prototype**, not a polished product.  
-Here are the known issues and limitations:
+### Vocabulary packs
 
-### ✔ Core mechanics  
-LLM ranking, scoring, tower logic, and gameplay loop all work.
+Vocabulary packs are plain newline-separated `.txt` files under `assets/`.
 
-### ✖ Animation  
-Still under development.  
-FLIP animations work but could be smoother.
+Current included packs:
 
-### ✖ UI / UX  
-Functional but not pretty — definitely “engineer art.”  
-Future PRs for styling or redesign are very welcome.
+- `assets/general_1.txt`
+- `assets/lite_1.txt`
+- `assets/basic_vocab.txt`
+- `assets/aviation_1.txt`
 
-### ✖ Ending Condition  
-There is currently **no real end**.  
-In the short term, the intended “finish line” is:
+To switch packs, set:
 
-**Who completes the same vocabulary set with the shortest time and highest score.**
+```env
+SEMANTRIS_VOCAB_FILE="assets/aviation_1.txt"
+```
 
-Timer + score are included for this reason.
+### Ranking provider
 
+The game currently prefers Gemini. If Gemini is unavailable or returns invalid output, the backend falls back to a deterministic local heuristic ranker so the session does not hard-fail.
 
+This fallback is intentionally simple. It is a resilience feature, not a semantic replacement for the primary model.
 
----
+## Development
 
-## **🤝 Contributing**
+### Run tests
 
-**Pull requests are welcome across every front:**
+```bash
+python -m unittest discover -s tests
+```
 
-- UI improvements  
-- Animations  
-- Better game balancing  
-- Theme packs / vocab files  
-- End-game logic  
-- Performance optimizations  
-- LLM-prompt enhancement  
-- Anything creative!
+### Supporting documents
 
-This is just a small demo; contributions can elevate it enormously.
+- `brief.md`: product brief for future contractors
+- `docs/V0.1.md`: implementation note for the current architectural refresh
 
+### Code quality goals
 
+This repo is aiming for a small but professional standard:
 
----
+- clear file ownership
+- testable game rules
+- readable API contracts
+- documented architecture
+- controlled session state
+- graceful failure behavior
 
-## **🙏 Acknowledgements**
+## Known Limitations
 
-A multitude of modern AI LLMs inspired this.  
-Gemini powers the engine today, but respect goes to:
+- LLM ranking is probabilistic, so some rounds will feel less stable than deterministic puzzle logic
+- the fallback ranker is much weaker than Gemini
+- animation quality is improved but still not at final production polish
+- there is no persistent profile, save system, or leaderboard yet
+- the current game mode is only the first structured version of the larger idea
 
-- OpenAI  
-- Google  
-- Anthropic  
-- DeepSeek
-- Meta  
-- Qwen  
-- And many more
+## Roadmap
 
-These models have become **force multipliers of the decade**,  
-reshaping how developers, creators, and everyday people build things.
+Near-term priorities:
 
-This project is nowhere close to the groundbreaking technical architecture or UI polish of Google’s original Semantris — that was built by an amazing team of engineers across many stacks.  
-This is just a humble modern twist using tools available to everyone.
+- migrate to the newer Google GenAI SDK
+- improve end-of-run states and summaries
+- strengthen visual polish and motion design
+- add richer difficulty and session options
+- improve fallback ranking quality
 
+Longer-term ideas:
 
+- seeded challenge mode
+- daily runs
+- local leaderboard support
+- theme-aware packs and presentation
+- additional Semantris-inspired game modes
 
----
+## Contributing
 
-## **Enjoy the Game! 🎉**
+Pull requests and experiments are welcome across:
 
-Experiment with word lists.  
-Play with clues.  
-Try creative associations.  
-Push the limits of LLM semantics.  
+- gameplay tuning
+- UI and animation polish
+- prompt engineering
+- provider integrations
+- fallback ranking strategies
+- vocabulary packs
+- tests and documentation
 
-And most importantly:
+If you are extending the codebase structurally, start with `brief.md` and `docs/V0.1.md` so the architecture direction stays consistent.
 
-**Have fun exploring how modern AI interprets the world through words.**
+## Notes
+
+- This project is inspired by Semantris, but it is an independent fan reimagining.
+- Free-tier API access from Google AI Studio is usually enough for local experimentation.
+- The project is intentionally small in scope today, but it is being shaped like a repo that can scale cleanly.

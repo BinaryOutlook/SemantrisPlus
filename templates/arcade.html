@@ -3,421 +3,135 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>LLM Semantris Tower</title>
-
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          fontFamily: {
-            inter: ["Inter", "sans-serif"],
-          },
-          colors: {
-            tealsoft: "#4fd1c5",
-          },
-          keyframes: {
-            dropIn: {
-              "0%": { transform: "translateY(-40px)", opacity: "0" },
-              "100%": { transform: "translateY(0)", opacity: "1" },
-            },
-            popOut: {
-              "0%": { transform: "scale(1)", opacity: "1" },
-              "100%": { transform: "scale(0.5) rotate(15deg)", opacity: "0" },
-            }
-          },
-          animation: {
-            dropIn: "dropIn 0.75s ease-out",
-            popOut: "popOut 0.5s ease-in",
-          },
-        },
-      },
-    };
-  </script>
-
+  <title>Semantris Plus</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;700&display=swap"
+    rel="stylesheet"
+  />
   <link
     rel="stylesheet"
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;500;700&display=swap"
+    href="{{ url_for('static', filename='css/app.css') }}"
   />
-
-  <style>
-    body {
-      background: #0d0d0d;
-      overflow: hidden;
-    }
-
-  #tower .word-item {
-    font-size: 1.2rem;
-    line-height: 1.1;
-    padding: 0.15rem 0.3rem;
-    margin-top: -2px;
-  }
-    
-    .removing {
-      animation: popOut 0.5s ease-in forwards;
-      z-index: 0;
-    }
-
-    .hit-zone-gradient {
-      background: linear-gradient(
-        to top,
-        rgba(79, 209, 197, 0.25),
-        rgba(79, 209, 197, 0.10),
-        transparent
-      );
-      pointer-events: none;
-      border-top: 2px dashed rgba(79, 209, 197, 0.4);
-      transform: translateY(45px);  /* move it DOWN by 58px, shifter */
-    }
-
-    #tower-wrapper::-webkit-scrollbar {
-      width: 4px;
-    }
-    #tower-wrapper::-webkit-scrollbar-thumb {
-      background: #4a5568;
-      border-radius: 4px;
-    }
-
-    /* Semantris-style keyboard hook: invisible but focusable input */
-    #keyboard_hook_form {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 1px;
-      height: 1px;
-      opacity: 0;
-      pointer-events: none;
-      z-index: -1;
-    }
-    #keyboard_hook_input {
-      width: 1px;
-      height: 1px;
-      border: none;
-      background: transparent;
-      color: transparent;
-      outline: none;
-    }
-
-    /* Window container to mimic Semantris wrapper */
-    #window_container {
-      width: 100vw;
-      height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-  </style>
 </head>
+<body>
+  <div class="page-glow page-glow--one" aria-hidden="true"></div>
+  <div class="page-glow page-glow--two" aria-hidden="true"></div>
 
-<body class="font-inter text-slate-400">
-
-  <!-- Semantris-style keyboard capture -->
-  <form id="keyboard_hook_form" autocomplete="off">
-    <input
-      id="keyboard_hook_input"
-      type="text"
-      autocomplete="off"
-      maxlength="1024"
-    />
-  </form>
-
-  <!-- Window container similar to original Semantris HTML -->
-  <div id="window_container">
-    <!-- Your existing game UI -->
-    <div class="w-full max-w-md mx-auto flex flex-col h-screen px-4 py-6">
-
-      <div class="flex items-center justify-between mb-6">
+  <main class="app-shell">
+    <section class="panel panel--info">
+      <div class="panel-topline">
         <div>
-          <div class="text-xs tracking-widest text-gray-500">SCORE</div>
-          <div id="score-display" class="text-4xl font-bold text-white">
-            {{ score }}
-          </div>
+          <p class="eyebrow">LLM-powered word tower</p>
+          <h1>Semantris Plus</h1>
         </div>
-        <div class="text-center">
-          <div class="text-xs tracking-widest text-gray-500">TIME</div>
-          <div id="timer-display" class="text-3xl font-semibold text-white">
-            00:00
-          </div>
+        <button id="new-game-button" class="ghost-button" type="button">
+          New Run
+        </button>
+      </div>
+
+      <p class="deck">
+        Feed the tower a clue. The model reorders every visible word by semantic
+        association. If the highlighted target lands inside the bottom-four
+        destruction zone, it clears.
+      </p>
+
+      <section class="stats-grid" aria-label="Session statistics">
+        <article class="stat-card">
+          <span class="stat-label">Score</span>
+          <strong id="score-value" class="stat-value">0</strong>
+        </article>
+        <article class="stat-card">
+          <span class="stat-label">Time</span>
+          <strong id="timer-value" class="stat-value stat-value--mono">00:00</strong>
+        </article>
+        <article class="stat-card">
+          <span class="stat-label">Turns</span>
+          <strong id="turns-value" class="stat-value">0</strong>
+        </article>
+        <article class="stat-card">
+          <span class="stat-label">Remaining</span>
+          <strong id="remaining-value" class="stat-value">0</strong>
+        </article>
+      </section>
+
+      <section class="target-card" aria-live="polite">
+        <div>
+          <p class="eyebrow">Current target</p>
+          <div id="target-value" class="target-word">...</div>
         </div>
-        <div class="text-right">
-          <div class="text-xs tracking-widest text-gray-500">TARGET</div>
-          <div
-            id="target-word-display"
-            class="text-2xl font-bold text-tealsoft"
-          >
-            {{ target_word }}
-          </div>
+        <div class="target-meta">
+          <span id="provider-badge" class="pill pill--provider">Loading</span>
+          <span id="latency-value" class="pill">-- ms</span>
+        </div>
+      </section>
+
+      <section class="progress-card" aria-label="Vocabulary progress">
+        <div class="progress-copy">
+          <span class="stat-label">Vocabulary progress</span>
+          <span id="progress-value" class="progress-value">0 / 0 seen</span>
+        </div>
+        <div class="progress-track">
+          <div id="progress-bar" class="progress-bar"></div>
+        </div>
+      </section>
+
+      <form id="clue-form" class="clue-form">
+        <label class="sr-only" for="clue-input">Clue</label>
+        <input
+          id="clue-input"
+          class="clue-input"
+          type="text"
+          autocomplete="off"
+          maxlength="120"
+          placeholder="Type a clue and press Enter"
+        />
+        <button id="submit-button" class="primary-button" type="submit">
+          Rank Clue
+        </button>
+      </form>
+
+      <div id="status-banner" class="status-banner" aria-live="polite"></div>
+
+      <dl class="meta-list">
+        <div>
+          <dt>Vocabulary</dt>
+          <dd id="vocab-value">...</dd>
+        </div>
+        <div>
+          <dt>Last clue</dt>
+          <dd id="last-clue-value">None yet</dd>
+        </div>
+      </dl>
+    </section>
+
+    <section class="panel panel--tower">
+      <div class="tower-topline">
+        <div>
+          <p class="eyebrow">Association stack</p>
+          <h2>Bottom-most means most related</h2>
+        </div>
+        <div class="danger-legend">
+          <span class="danger-legend__line"></span>
+          <span>Destruction zone</span>
         </div>
       </div>
 
-      <div class="relative flex-grow overflow-hidden my-4">
-      <div class="absolute bottom-0 left-0 w-full h-40 hit-zone-gradient"></div>
-
-      <!-- NEW SEPARATE DASHED LINE (place anywhere you want!) -->
-      <div class="hit-line absolute left-0 w-full"></div>
-
-        <div
-          id="tower-wrapper"
-          class="h-full w-full overflow-y-auto absolute bottom-0 left-0"
-        >
-          <div
-            id="tower"
-            class="flex flex-col-reverse h-full px-4 py-4 space-y-0 space-y-reverse"
-          >
-            {% for word in game_board %}
-            <div
-              data-word="{{ word }}"
-              class="word-item text-lg font-semibold tracking-wide {% if word == target_word %}text-tealsoft font-bold{% else %}text-slate-400{% endif %}"
-              style="order: {{ loop.index0 }}"
-            >
-              {{ word }}
-            </div>
-            {% endfor %}
-          </div>
+      <div id="tower-stage" class="tower-stage">
+        <div class="tower-stage__grid" aria-hidden="true"></div>
+        <div class="danger-zone" aria-hidden="true">
+          <span class="danger-zone__label">Bottom four clear the target</span>
         </div>
+        <div id="effects-layer" class="effects-layer" aria-hidden="true"></div>
+        <div id="tower" class="tower" aria-live="polite"></div>
       </div>
+    </section>
+  </main>
 
-      <div
-        class="mt-auto rounded-2xl bg-slate-900 border border-slate-700 shadow-xl px-4 py-4"
-      >
-        <!-- Visible clue display; can still be clicked and edited if you want -->
-        <form id="clue-form">
-          <input
-            type="text"
-            id="clue-input"
-            class="w-full px-4 py-3 rounded-xl bg-slate-800 text-white text-lg border border-slate-600 focus:outline-none focus:ring-2 focus:ring-tealsoft placeholder-slate-400"
-            placeholder="Type a clue and press Enter..."
-            autocomplete="off"
-          />
-          <button
-            id="submit-button"
-            type="submit"
-            class="w-full mt-3 px-4 py-3 rounded-xl bg-tealsoft/90 hover:bg-tealsoft text-black font-semibold text-lg transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            Submit Clue
-          </button>
-        </form>
-        <div
-          id="message-area"
-          class="h-6 mt-3 text-center text-sm text-slate-400"
-        ></div>
-      </div>
-    </div>
-  </div>
-
-  <script>
-    // --- DOM references ---
-    const tower = document.getElementById("tower");
-    const form = document.getElementById("clue-form");
-    const input = document.getElementById("clue-input");
-    const submitButton = document.getElementById("submit-button");
-    const message = document.getElementById("message-area");
-    const scoreDisplay = document.getElementById("score-display");
-    const targetDisplay = document.getElementById("target-word-display");
-    const timerDisplay = document.getElementById("timer-display");
-    const keyboardForm = document.getElementById("keyboard_hook_form");
-    const keyboardInput = document.getElementById("keyboard_hook_input");
-    const windowContainer = document.getElementById("window_container");
-
-    let animating = false;
-
-    // --- Timer ---
-    const startTime = Date.now();
-    setInterval(() => {
-      const elapsed = Math.floor((Date.now() - startTime) / 1000);
-      const m = String(Math.floor(elapsed / 60)).padStart(2, "0");
-      const s = String(elapsed % 60).padStart(2, "0");
-      timerDisplay.textContent = `${m}:${s}`;
-    }, 1000);
-
-    // --- Focus keyboard hook like Semantris ---
-    function focusKeyboardInput() {
-      if (keyboardInput) {
-        keyboardInput.focus();
-      }
-    }
-    focusKeyboardInput();
-    window.addEventListener("click", focusKeyboardInput);
-
-    // Mirror hidden input → visible input for "Semant ris style" typing
-    if (keyboardInput) {
-      keyboardInput.addEventListener("input", () => {
-        input.value = keyboardInput.value;
-      });
-    }
-
-    // --- Shared submit logic for both inputs ---
-    async function handleClueSubmit(clueText) {
-      if (animating) return;
-
-      const clue = clueText.trim();
-      if (!clue) return;
-
-      setLoading(true);
-
-      try {
-        const res = await fetch("/rank", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ clue }),
-        });
-
-        const result = await res.json();
-        setLoading(false);
-
-        // Clear UI inputs so player can type next clue
-        input.value = "";
-        if (keyboardInput) keyboardInput.value = "";
-
-        if (result.error) {
-          showMessage(result.error, "error");
-          return;
-        }
-
-        animating = true;
-
-        if (result.hit) {
-          showMessage(
-            `Hit! Removed ${result.words_removed.length} word(s).`,
-            "hit"
-          );
-          animateHitAndRedraw(result);
-        } else {
-          showMessage("Miss! Tower reordered.", "miss");
-          updateTower(
-            result.new_board,
-            result.new_target,
-            result.new_score,
-            false
-          );
-          animating = false;
-        }
-      } catch (err) {
-        setLoading(false);
-        showMessage("Network error. Please try again.", "error");
-      } finally {
-        focusKeyboardInput();
-      }
-    }
-
-    // Visible form submit (bottom clue box)
-    form.addEventListener("submit", (e) => {
-      e.preventDefault();
-      handleClueSubmit(input.value);
-    });
-
-    // Hidden Semantris-style keyboard form submit
-    keyboardForm.addEventListener("submit", (e) => {
-      e.preventDefault();
-      handleClueSubmit(keyboardInput.value);
-    });
-
-    // --- Helper functions ---
-    function setLoading(isLoading) {
-      submitButton.disabled = isLoading;
-      submitButton.textContent = isLoading ? "Thinking..." : "Submit Clue";
-      if (isLoading) showMessage("");
-    }
-
-    function showMessage(msg, type = "info") {
-      message.textContent = msg;
-      let classes = "h-6 mt-3 text-center text-sm ";
-      if (type === "error") classes += "text-red-400";
-      else if (type === "hit") classes += "text-tealsoft";
-      else if (type === "miss") classes += "text-yellow-400";
-      else classes += "text-slate-400";
-      message.className = classes;
-    }
-
-    // --- Animation functions (same logic, just factored) ---
-
-    function animateHitAndRedraw(result) {
-      const wordsToRemove = new Set(result.words_removed);
-
-      tower.querySelectorAll(".word-item").forEach((el) => {
-        if (wordsToRemove.has(el.dataset.word)) {
-          el.classList.add("removing");
-        }
-      });
-
-      setTimeout(() => {
-        updateTower(
-          result.new_board,
-          result.new_target,
-          result.new_score,
-          true
-        );
-        animating = false;
-      }, 500);
-    }
-
-    function updateTower(wordList, newTarget, newScore, isHit) {
-      // FLIP: First
-      const existingElements = new Map();
-      const firstPositions = new Map();
-
-      const query = isHit ? ".word-item:not(.removing)" : ".word-item";
-      tower.querySelectorAll(query).forEach((el) => {
-        const word = el.dataset.word;
-        existingElements.set(word, el);
-        firstPositions.set(word, el.getBoundingClientRect());
-      });
-
-      // Clear and rebuild tower in new order
-      tower.innerHTML = "";
-      const newTargetLower = newTarget.toLowerCase();
-      const elementsToAnimate = [];
-
-      wordList.forEach((word, idx) => {
-        const el = document.createElement("div");
-        el.dataset.word = word;
-        el.textContent = word;
-        el.style.order = idx;
-        el.className = "word-item text-lg font-semibold tracking-wide";
-
-        if (existingElements.has(word)) {
-          const firstPos = firstPositions.get(word);
-          elementsToAnimate.push({ el, firstPos });
-        } else {
-          el.classList.add("animate-dropIn");
-        }
-
-        if (word.toLowerCase() === newTargetLower) {
-          el.classList.add("text-tealsoft", "font-bold");
-        } else if (idx < 4) {
-          el.classList.add("text-slate-100");
-        } else {
-          el.classList.add("text-slate-400");
-        }
-
-        tower.appendChild(el);
-      });
-
-      // FLIP: Invert & Play
-      elementsToAnimate.forEach(({ el, firstPos }) => {
-        const lastPos = el.getBoundingClientRect();
-        const deltaY = firstPos.top - lastPos.top;
-
-        if (Math.abs(deltaY) > 1) {
-          el.style.transition = "none";
-          el.style.transform = `translateY(${deltaY}px)`;
-          el.offsetHeight;
-          el.style.transition = "transform 0.5s ease";
-          el.style.transform = "translateY(0px)";
-          el.addEventListener(
-            "transitionend",
-            () => {
-              el.style.transition = "";
-              el.style.transform = "";
-            },
-            { once: true }
-          );
-        }
-      });
-
-      scoreDisplay.textContent = newScore;
-      targetDisplay.textContent = newTarget;
-    }
-  </script>
+  <script
+    defer
+    src="{{ url_for('static', filename='js/game.js') }}"
+  ></script>
 </body>
 </html>
