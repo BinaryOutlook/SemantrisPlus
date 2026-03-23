@@ -48,7 +48,7 @@ This repo currently uses Gemini as the primary ranking provider and includes a l
 
 ## Project Status
 
-Current status: `v0.2` active prototype with a modular Flask backend, a typed frontend client, and a stronger browser-side development workflow.
+Current status: `v0.2.3` active prototype with a modular Flask backend, a typed frontend client, and a dual-theme UI system with manual light/dark switching.
 
 What is already in place:
 
@@ -57,6 +57,8 @@ What is already in place:
 - no-repeat word handling until the unseen pool is exhausted
 - improved tower presentation and animation sequencing
 - a TypeScript frontend source tree compiled into a browser bundle
+- a shared theme controller with manual light/dark mode switching across the landing page and the game
+- a polished light mode plus a flatter, surface-led dark mode tuned for the playfield
 - frontend type-checking and Vitest coverage for key browser-side logic
 - fallback ranking path for resilience
 - automated tests for gameplay rules, API behavior, and provider fallback behavior
@@ -76,21 +78,22 @@ This repository is now structured around clear responsibilities instead of mixin
 
 ### Runtime flow
 
-1. Flask serves the HTML shell.
-2. The browser loads the compiled TypeScript frontend bundle.
-3. The frontend loads current session state from the JSON API.
+1. Flask serves the landing page and game HTML shells.
+2. The browser applies the stored or system theme and loads the compiled TypeScript bundles.
+3. The game frontend loads current session state from the JSON API.
 4. The player submits a clue.
 5. The backend sends the visible board to the ranking provider.
 6. The ranking result is validated and converted into board mutations.
-7. The frontend animates reorder, removal, collapse, and spawn events.
+7. The frontend animates reorder, removal, collapse, spawn events, and end-of-run UI state.
 
 ### Key design choices
 
 - Gameplay rules are isolated so they can be tested without the web app.
 - LLM interaction is isolated so provider changes do not require rewriting the game loop.
-- The interactive frontend now lives in dedicated TypeScript modules compiled into a served browser bundle.
+- The interactive frontend now lives in dedicated TypeScript modules compiled into served browser bundles.
 - Session state is explicit so the frontend can render the game from stable API payloads.
 - The frontend build and validation steps are small but formalized so browser code can evolve safely.
+- Theme state is handled in the frontend so both pages stay visually consistent while still respecting system preference by default.
 
 ## Repository Structure
 
@@ -120,9 +123,10 @@ SemantrisPlus/
 │   └── build-frontend.mjs # esbuild entry for browser bundle output
 ├── static/
 │   ├── css/app.css        # Visual system and layout styling
-│   └── js/game.bundle.js  # Compiled browser bundle served by Flask
+│   └── js/                # Compiled browser bundles served by Flask
 ├── templates/
-│   └── arcade.html        # HTML shell for the game
+│   ├── arcade.html        # HTML shell for the game
+│   └── home.html          # HTML shell for the landing page
 ├── testing/
 │   └── api_latency.py     # Optional provider latency experiment
 └── tests/
@@ -138,6 +142,7 @@ SemantrisPlus/
 - TypeScript for the interactive browser views
 - esbuild for frontend bundling
 - custom CSS
+- system-aware light/dark theming with manual override
 - Google Gemini API via the Google Gen AI SDK
 - `unittest` for automated tests
 - Vitest for frontend unit and DOM tests
@@ -177,6 +182,8 @@ python3 app.py
 ```
 
 Open [http://127.0.0.1:5001](http://127.0.0.1:5001), then launch `Iteration Mode` from the landing page.
+
+Light and dark mode are both available. The UI will follow the system theme by default, and the top-right toggle on the landing page and game page lets you override it manually.
 
 ### 4. Rebuild the frontend after TypeScript changes
 
@@ -242,7 +249,7 @@ python3 -m unittest discover -s tests
 
 ### Frontend commands
 
-- `npm run build`: compile the TypeScript frontend into the browser bundle served by Flask
+- `npm run build`: compile the TypeScript frontend into the browser bundles served by Flask
 - `npm run check:frontend`: run TypeScript type-checking without emitting files
 - `npm run test:frontend`: run frontend unit and DOM tests with Vitest
 

@@ -10,6 +10,25 @@ The format is inspired by Keep a Changelog, adapted for this repo's pace and sco
 
 - No unreleased entries yet.
 
+## [0.2.3] - 2026-03-24
+
+### Added
+
+- Added a shared light and dark theme system for both the landing page and the live game page.
+- Added a manual theme toggle in the top-right controls so players can switch modes without relying only on system settings.
+- Added a dedicated frontend theme bundle and browser-side theme state handling to persist the selected mode across page loads.
+
+### Changed
+
+- Reworked the UI styling so the light mode and dark mode now use distinct, intentional surface systems instead of one palette trying to serve both contexts.
+- Refined the dark mode playfield, cards, target banner, clue input, and clear zone to use flatter layered surfaces, clearer contrast, and a more consistent game-board hierarchy.
+- Updated the frontend shell so theme selection is applied before page paint, reducing theme flash during navigation and refresh.
+
+### Why
+
+- Once the frontend moved to TypeScript and the UI became more productized, a single visual treatment was no longer enough for different viewing conditions and personal preference.
+- Introducing formal light and dark modes was a technical and UX necessity so the interface could stay readable, polished, and consistent across both major pages of the app.
+
 ## [0.2.0] - 2026-03-24
 
 ### Added
