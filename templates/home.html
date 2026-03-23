@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Semantris Plus</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;800&family=Sora:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap"
+    rel="stylesheet"
+  />
+  <link
+    rel="stylesheet"
+    href="{{ url_for('static', filename='css/app.css') }}"
+  />
+</head>
+<body class="page page--home">
+  <div class="page-scanlines" aria-hidden="true"></div>
+  <div class="page-glow page-glow--one" aria-hidden="true"></div>
+  <div class="page-glow page-glow--two" aria-hidden="true"></div>
+
+  <div class="vector-gate vector-gate--left" aria-hidden="true">
+    <span class="vector-gate__line"></span>
+    <span class="vector-gate__line"></span>
+    <span class="vector-gate__line"></span>
+    <span class="vector-gate__line"></span>
+  </div>
+  <div class="vector-gate vector-gate--right" aria-hidden="true">
+    <span class="vector-gate__line"></span>
+    <span class="vector-gate__line"></span>
+    <span class="vector-gate__line"></span>
+    <span class="vector-gate__line"></span>
+  </div>
+
+  <main class="landing-shell">
+    <header class="landing-topbar">
+      <div class="brand-mark">SEMANTRIS PLUS</div>
+      <div class="landing-kicker">Word association games powered by machine learning</div>
+    </header>
+
+    <section class="landing-hero">
+      <div class="landing-copy">
+        <p class="eyebrow">Machine-ranked semantic play</p>
+        <h1 class="landing-logo">SEMANTRIS</h1>
+        <p class="landing-tag">
+          Fast clue entry, luminous signal design, and a tower that reacts like
+          a live semantic instrument.
+        </p>
+
+        <div class="landing-chip-row" aria-label="Game highlights">
+          <span class="landing-chip">Gemini-ranked</span>
+          <span class="landing-chip">Half-second motion</span>
+          <span class="landing-chip">Fallback safe</span>
+        </div>
+      </div>
+
+      <div class="landing-preview">
+        <section class="mode-card">
+          <div class="mode-card__header">
+            <p class="eyebrow">Only mode online</p>
+            <h2>Iteration Mode</h2>
+          </div>
+
+          <div class="mode-card__body">
+            <p class="deck">
+              Think fast, send one clue, and bend the stack until the target
+              drops into the strike tray.
+            </p>
+
+            <ul class="mode-card__points">
+              <li class="mode-card__point">Live semantic reordering with Gemini</li>
+              <li class="mode-card__point">Destruction tray with fast cascade timing</li>
+              <li class="mode-card__point">Adaptive vocab packs and run progression</li>
+            </ul>
+
+            <div class="mode-card__actions">
+              <a class="command-button" href="{{ url_for('iteration_mode') }}">Enter Iteration Mode</a>
+              <a class="ghost-link" href="{{ url_for('iteration_mode') }}">Skip briefing</a>
+            </div>
+          </div>
+        </section>
+
+        <section class="preview-stage" aria-hidden="true">
+          <div class="preview-stage__reticle"></div>
+          <div class="preview-stage__stack">
+            <span class="preview-chip preview-chip--target">Signal</span>
+            <span class="preview-chip">Lantern</span>
+            <span class="preview-chip">Harbor</span>
+            <span class="preview-chip">Cipher</span>
+            <span class="preview-chip preview-chip--tray">Anchor</span>
+            <span class="preview-chip preview-chip--tray">Current</span>
+          </div>
+          <div class="preview-stage__tray"></div>
+        </section>
+      </div>
+    </section>
+
+    <footer class="landing-footer">
+      <div class="landing-footer__note">
+        A modern one-mode landing page inspired by the original Semantris arcade presentation.
+      </div>
+      <div class="landing-footer__stats">
+        <span class="landing-stat">Iteration Mode</span>
+        <span class="landing-stat">Play in browser</span>
+        <span class="landing-stat">Designed for fast reruns</span>
+      </div>
+    </footer>
+  </main>
+</body>
+</html>

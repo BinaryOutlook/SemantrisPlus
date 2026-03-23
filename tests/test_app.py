@@ -22,6 +22,18 @@ class AppRouteTests(unittest.TestCase):
         app_module.app.config.update(TESTING=True)
         self.client = app_module.app.test_client()
 
+    def test_home_page_loads_iteration_mode_entry(self) -> None:
+        response = self.client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Iteration Mode", response.data)
+
+    def test_iteration_mode_page_loads(self) -> None:
+        response = self.client.get("/iteration-mode")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Send Clue", response.data)
+
     def test_state_endpoint_initializes_session(self) -> None:
         response = self.client.get("/api/game/state")
         payload = response.get_json()

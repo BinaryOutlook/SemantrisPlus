@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
-from flask import Flask, jsonify, render_template, request, session
+from flask import Flask, jsonify, redirect, render_template, request, session, url_for
 
 from game_logic import (
     DESTRUCTION_ZONE_SIZE,
@@ -109,7 +109,17 @@ def current_state() -> dict[str, Any]:
 
 @app.get("/")
 def index() -> str:
+    return render_template("home.html")
+
+
+@app.get("/iteration-mode")
+def iteration_mode() -> str:
     return render_template("arcade.html")
+
+
+@app.get("/play")
+def play() -> Any:
+    return redirect(url_for("iteration_mode"))
 
 
 @app.get("/api/game/state")

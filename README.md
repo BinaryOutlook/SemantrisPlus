@@ -24,9 +24,9 @@ The ambition for this repo is straightforward:
 
 This is intentionally both a game project and a software-structure project.
 
-## Current Gameplay
+## Current Mode
 
-The current mode is a tower-based arcade variant:
+The current playable mode is `Iteration Mode`, a tower-based arcade variant:
 
 - the game starts with a tower of words and one highlighted target word
 - the player enters a clue
@@ -159,7 +159,7 @@ FLASK_DEBUG="1"
 python3 app.py
 ```
 
-Open [http://127.0.0.1:5001](http://127.0.0.1:5001).
+Open [http://127.0.0.1:5001](http://127.0.0.1:5001), then launch `Iteration Mode` from the landing page.
 
 ## Configuration
 

@@ -22,6 +22,13 @@ const stateRefs = {
 
 const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const dangerZoneSize = 4;
+const animationTimings = {
+  miss: 220,
+  reorder: 160,
+  handoff: 20,
+  explode: 120,
+  settle: 180,
+};
 
 let currentState = null;
 let timerHandle = null;
@@ -46,10 +53,11 @@ function dangerWordsFromBoard(board) {
 
 function setBusy(nextBusy) {
   busy = nextBusy;
+  document.body.classList.toggle("is-busy", nextBusy);
   stateRefs.submitButton.disabled = nextBusy || (currentState?.game_over ?? false);
   stateRefs.newGameButton.disabled = nextBusy;
   stateRefs.clueInput.disabled = nextBusy || (currentState?.game_over ?? false);
-  stateRefs.submitButton.textContent = nextBusy ? "Ranking..." : "Rank Clue";
+  stateRefs.submitButton.textContent = nextBusy ? "Routing..." : "Send Clue";
 }
 
 function setStatus(message, tone = "neutral") {
@@ -161,6 +169,7 @@ async function animateBoardTransition(nextBoard, boardState, options = {}) {
   }
 
   const duration = options.duration ?? 500;
+  const spawnDuration = options.spawnDuration ?? duration;
   const spawnedWords = new Set(options.spawnedWords || []);
   const existingRects = new Map();
 
@@ -211,7 +220,7 @@ async function animateBoardTransition(nextBoard, boardState, options = {}) {
             { transform: "translateY(0) scale(1)", opacity: 1 },
           ],
           {
-            duration: Math.max(duration, 650),
+            duration: spawnDuration,
             easing: "cubic-bezier(0.16, 1, 0.3, 1)",
           },
         ).finished.catch(() => undefined),
@@ -257,7 +266,7 @@ async function explodeWords(wordsToRemove) {
           { opacity: 0, transform: "scale(0.78) rotate(-8deg)", filter: "blur(12px)" },
         ],
         {
-          duration: 700,
+          duration: animationTimings.explode,
           easing: "cubic-bezier(0.19, 1, 0.22, 1)",
           fill: "forwards",
         },
@@ -285,17 +294,18 @@ async function handleTurn(result) {
   };
 
   if (result.resolution === "miss") {
-    await animateBoardTransition(result.ranked_board, rankedState, { duration: 500 });
+    await animateBoardTransition(result.ranked_board, rankedState, { duration: animationTimings.miss });
     updateHud(result.state);
     setStatus(messageWithWarning(result), "miss");
     return;
   }
 
-  await animateBoardTransition(result.ranked_board, rankedState, { duration: 500 });
-  await wait(250);
+  await animateBoardTransition(result.ranked_board, rankedState, { duration: animationTimings.reorder });
+  await wait(animationTimings.handoff);
   await explodeWords(result.words_removed);
   await animateBoardTransition(result.new_board, result.state, {
-    duration: 560,
+    duration: animationTimings.settle,
+    spawnDuration: animationTimings.settle,
     spawnedWords: result.spawned_words,
   });
   updateHud(result.state);
@@ -306,7 +316,7 @@ async function loadState() {
   const payload = await fetchJson("/api/game/state");
   updateHud(payload.state);
   renderBoard(payload.state.board, payload.state);
-  setStatus("Aim for the target by pulling it into the bottom four.", "neutral");
+  setStatus("Target locked. Transmit a clue and pull it into the strike tray.", "neutral");
 }
 
 async function startNewGame() {
@@ -339,7 +349,7 @@ async function submitClue(event) {
   }
 
   setBusy(true);
-  setStatus("Ranking the tower with the current clue...", "neutral");
+  setStatus("Gemini is rethreading the stack around your clue...", "neutral");
 
   try {
     const result = await fetchJson("/api/game/turn", {
