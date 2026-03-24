@@ -24,7 +24,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
-    href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700;800&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@400;500;600;700;800&display=swap"
     rel="stylesheet"
   />
   <link
@@ -37,9 +37,12 @@
     <header class="game-topbar">
       <div class="topbar-leading">
         <a class="ghost-link ghost-link--compact" href="{{ url_for('index') }}">Back</a>
-        <div class="topbar-brand">
+        <div class="brand-stack">
           <span class="brand-mark">Semantris Plus</span>
-          <span class="mode-chip">Iteration Mode</span>
+          <div class="brand-inline">
+            <span class="mode-chip">Iteration Mode</span>
+            <span class="micro-copy">Quick semantic puzzle</span>
+          </div>
         </div>
       </div>
 
@@ -80,45 +83,13 @@
     </header>
 
     <section class="game-grid">
-      <aside class="side-panel side-panel--left">
-        <section class="panel-card progress-card" aria-label="Vocabulary progress">
-          <div class="panel-card__header">
-            <span class="eyebrow">Progress</span>
-            <span id="progress-value" class="micro-copy">0 / 0 seen</span>
-          </div>
-          <div class="progress-track">
-            <div id="progress-bar" class="progress-bar"></div>
-          </div>
-        </section>
-
-        <section class="stats-stack" aria-label="Session statistics">
-          <article class="panel-card stat-card">
-            <span class="eyebrow">Turns</span>
-            <strong id="turns-value" class="stat-value">0</strong>
-          </article>
-          <article class="panel-card stat-card">
-            <span class="eyebrow">Remaining</span>
-            <strong id="remaining-value" class="stat-value">0</strong>
-          </article>
-        </section>
-
-        <dl class="panel-card meta-list">
-          <div>
-            <dt>Vocabulary</dt>
-            <dd id="vocab-value">...</dd>
-          </div>
-          <div>
-            <dt>Last clue</dt>
-            <dd id="last-clue-value">None yet</dd>
-          </div>
-        </dl>
-      </aside>
-
       <section class="stage-panel">
         <div class="stage-topline">
-          <div class="stage-target" aria-live="polite">
-            <span class="eyebrow">Target</span>
-            <div id="target-value" class="target-word">...</div>
+          <div class="stage-copy">
+            <span class="eyebrow">Current target</span>
+            <div class="stage-target" aria-live="polite">
+              <div id="target-value" class="target-word">...</div>
+            </div>
           </div>
         </div>
 
@@ -137,13 +108,10 @@
           <div class="panel-card__header">
             <div>
               <span class="eyebrow">Clue</span>
-              <h2 class="panel-title">Type one clue to pull the target lower.</h2>
+              <h2 class="panel-title">One clue moves the target.</h2>
             </div>
+            <span class="micro-copy">Closest words settle lower.</span>
           </div>
-
-          <p class="deck">
-            The most related words settle closest to the clear zone.
-          </p>
 
           <form id="clue-form" class="clue-form">
             <label class="sr-only" for="clue-input">Clue</label>
@@ -165,13 +133,68 @@
 
         <section class="panel-card provider-stack">
           <div class="panel-card__header">
-            <span class="eyebrow">Ranking</span>
-            <span class="micro-copy">Current model</span>
+            <div>
+              <span class="eyebrow">Ranking</span>
+              <h2 class="panel-title panel-title--small">Current model</h2>
+            </div>
           </div>
           <div class="provider-stack__badges">
             <span id="provider-badge" class="status-pill status-pill--provider">Loading</span>
             <span id="latency-value" class="status-pill">-- ms</span>
           </div>
+        </section>
+      </aside>
+
+      <aside class="side-panel side-panel--left">
+        <section class="panel-card progress-card" aria-label="Vocabulary progress">
+          <div class="panel-card__header">
+            <div>
+              <span class="eyebrow">Run</span>
+              <h2 class="panel-title panel-title--small">Current state</h2>
+            </div>
+          </div>
+
+          <div class="run-stat">
+            <div class="run-stat__head">
+              <span class="micro-copy">Progress</span>
+              <span id="progress-value" class="micro-copy">0 / 0 seen</span>
+            </div>
+            <div class="progress-track">
+              <div id="progress-bar" class="progress-bar"></div>
+            </div>
+          </div>
+
+          <dl class="meta-list meta-list--grid">
+            <div>
+              <dt>Turns</dt>
+              <dd id="turns-value">0</dd>
+            </div>
+            <div>
+              <dt>Remaining</dt>
+              <dd id="remaining-value">0</dd>
+            </div>
+            <div>
+              <dt>Vocabulary</dt>
+              <dd id="vocab-value">...</dd>
+            </div>
+            <div>
+              <dt>Last clue</dt>
+              <dd id="last-clue-value">None yet</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="panel-card note-card">
+          <div class="panel-card__header">
+            <div>
+              <span class="eyebrow">Rhythm</span>
+              <h2 class="panel-title panel-title--small">Play the lane, not the noise.</h2>
+            </div>
+          </div>
+          <p class="deck">
+            Keep clues tight. Broad associations move more of the stack, while
+            precise clues can open a cleaner lane.
+          </p>
         </section>
       </aside>
     </section>

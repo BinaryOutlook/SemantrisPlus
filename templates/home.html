@@ -24,7 +24,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
-    href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700;800&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@400;500;600;700;800&display=swap"
     rel="stylesheet"
   />
   <link
@@ -35,7 +35,10 @@
 <body class="page page--home">
   <main class="landing-shell">
     <header class="landing-topbar">
-      <div class="brand-mark">SEMANTRIS PLUS</div>
+      <div class="brand-stack">
+        <div class="brand-mark">Semantris Plus</div>
+        <div class="brand-note">Semantic word arcade</div>
+      </div>
       <div class="topbar-actions">
         <div class="theme-toggle" role="group" aria-label="Color theme">
           <button
@@ -61,17 +64,17 @@
 
     <section class="landing-hero">
       <div class="landing-copy">
-        <p class="eyebrow">LLM-ranked word play</p>
-        <h1 class="landing-logo">Semantris Plus</h1>
+        <p class="eyebrow">Quick replayable puzzle</p>
+        <h1 class="landing-logo">One clue. One stack. Instant semantic motion.</h1>
         <p class="landing-tag">
-          Type one clue, watch the stack reorder, and pull the target into the
-          clear zone.
+          Semantris Plus turns each clue into a fast browser puzzle: pull the
+          target downward, clear the zone, and rerun the moment the round ends.
         </p>
 
         <div class="landing-chip-row" aria-label="Game highlights">
-          <span class="landing-chip">Fast reruns</span>
-          <span class="landing-chip">Live ranking</span>
-          <span class="landing-chip">Fallback safe</span>
+          <span class="landing-chip">Short runs</span>
+          <span class="landing-chip">Semantic ranking</span>
+          <span class="landing-chip">Browser play</span>
         </div>
       </div>
 
@@ -84,14 +87,14 @@
 
           <div class="mode-card__body">
             <p class="deck">
-              Think fast, send one clue, and bend the stack until the target
-              drops into the clear zone.
+              Type one clue. The closest words fall lower. If the target reaches
+              the clear zone, the stack opens and the run keeps moving.
             </p>
 
             <ul class="mode-card__points">
-              <li class="mode-card__point">Live semantic reordering with Gemini</li>
-              <li class="mode-card__point">Readable board motion and compact feedback</li>
-              <li class="mode-card__point">Adaptive vocab packs and run progression</li>
+              <li class="mode-card__point">Fast reruns with compact feedback</li>
+              <li class="mode-card__point">Semantic ranking with fallback safety</li>
+              <li class="mode-card__point">Switchable vocabulary packs</li>
             </ul>
 
             <form class="pack-form" method="post" action="{{ url_for('start_iteration_mode') }}">
@@ -115,35 +118,41 @@
               </select>
 
               <div class="mode-card__actions">
-                <button class="command-button" type="submit">Enter Iteration Mode</button>
-                <a class="ghost-link" href="{{ url_for('iteration_mode') }}">Open game</a>
+                <button class="command-button" type="submit">Start a run</button>
+                <a class="ghost-link" href="{{ url_for('iteration_mode') }}">See the board</a>
               </div>
             </form>
           </div>
         </section>
 
         <section class="preview-stage" aria-hidden="true">
-          <div class="preview-stage__stack">
-            <span class="preview-chip">Thunder</span>
-            <span class="preview-chip">Sports</span>
-            <span class="preview-chip">Lake</span>
-            <span class="preview-chip preview-chip--target">Steam</span>
-            <span class="preview-chip preview-chip--tray">Ginger</span>
-            <span class="preview-chip preview-chip--tray">Vineyard</span>
+          <div class="preview-stage__header">
+            <span class="preview-stage__label">Live preview</span>
+            <span class="preview-stage__meta">Target moving toward the clear zone</span>
           </div>
-          <div class="preview-stage__tray"></div>
+          <div class="preview-stage__stack">
+            <span class="preview-chip">Harbor</span>
+            <span class="preview-chip">Wake</span>
+            <span class="preview-chip">Beacon</span>
+            <span class="preview-chip preview-chip--target">Static port</span>
+            <span class="preview-chip preview-chip--tray">Slipway</span>
+            <span class="preview-chip preview-chip--tray">Dockline</span>
+          </div>
+          <div class="preview-stage__tray">
+            <span class="danger-zone__label">Clear zone</span>
+          </div>
         </section>
       </div>
     </section>
 
     <footer class="landing-footer">
       <div class="landing-footer__note">
-        A modern Semantris-style arcade built for fast clue entry and satisfying semantic movement.
+        Built for quick clue entry, readable motion, and immediate reruns.
       </div>
       <div class="landing-footer__stats">
         <span class="landing-stat">Iteration Mode</span>
         <span class="landing-stat">Play in browser</span>
-        <span class="landing-stat">Designed for fast reruns</span>
+        <span class="landing-stat">Fallback safe</span>
       </div>
     </footer>
   </main>
