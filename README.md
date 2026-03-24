@@ -48,7 +48,7 @@ This repo supports two remote ranking modes: Gemini through Google’s Gen AI SD
 
 ## Project Status
 
-Current status: `v0.2.3` active prototype with a modular Flask backend, a typed frontend client, and a dual-theme UI system with manual light/dark switching.
+Current status: `v0.2.4` active prototype with a modular Flask backend, a typed frontend client, openai - Gemini Dual Capatable and a dual-theme UI system with manual light/dark switching. 
 
 What is already in place:
 
