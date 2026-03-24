@@ -94,10 +94,31 @@
               <li class="mode-card__point">Adaptive vocab packs and run progression</li>
             </ul>
 
-            <div class="mode-card__actions">
-              <a class="command-button" href="{{ url_for('iteration_mode') }}">Enter Iteration Mode</a>
-              <a class="ghost-link" href="{{ url_for('iteration_mode') }}">Open game</a>
-            </div>
+            <form class="pack-form" method="post" action="{{ url_for('start_iteration_mode') }}">
+              <label class="eyebrow pack-form__label" for="vocabulary-pack-select">
+                Vocabulary pack
+              </label>
+              <select
+                id="vocabulary-pack-select"
+                class="pack-select"
+                name="vocabulary_pack_id"
+                aria-label="Vocabulary pack"
+              >
+                {% for pack in vocabulary_packs %}
+                  <option
+                    value="{{ pack.id }}"
+                    {% if pack.id == selected_pack_id %}selected{% endif %}
+                  >
+                    {{ pack.display_name }} ({{ pack.word_count }})
+                  </option>
+                {% endfor %}
+              </select>
+
+              <div class="mode-card__actions">
+                <button class="command-button" type="submit">Enter Iteration Mode</button>
+                <a class="ghost-link" href="{{ url_for('iteration_mode') }}">Open game</a>
+              </div>
+            </form>
           </div>
         </section>
 
