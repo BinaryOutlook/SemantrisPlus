@@ -77,6 +77,14 @@ class FakeOpenAIClient:
         self.chat = FakeOpenAIChat(response)
 
 
+class FakeAPIStatusError(Exception):
+    def __init__(self, message: str, *, status_code: int, request_id: str, body: dict):
+        super().__init__(message)
+        self.status_code = status_code
+        self.request_id = request_id
+        self.body = body
+
+
 class ExplodingPrimary:
     provider = "gemini"
 
@@ -86,6 +94,25 @@ class ExplodingPrimary:
 
     def rank_words(self, clue, words):
         raise RankingError("provider exploded")
+
+
+class StatusFailingPrimary:
+    provider = "openai"
+    model_name = "gpt-5.2-mini"
+    base_url = "https://example.com/v1"
+
+    def rank_words(self, clue, words):
+        raise FakeAPIStatusError(
+            "invalid api key",
+            status_code=401,
+            request_id="req_123",
+            body={
+                "error": {
+                    "type": "invalid_request_error",
+                    "code": "invalid_api_key",
+                }
+            },
+        )
 
 
 class LLMClientTests(unittest.TestCase):
@@ -185,6 +212,8 @@ class LLMClientTests(unittest.TestCase):
 
         self.assertTrue(result.used_fallback)
         self.assertIn("GEMINI_API_KEY", result.warning)
+        self.assertIn("stage=configuration", result.warning)
+        self.assertIn("request_attempted=no", result.warning)
 
     def test_build_ranker_from_env_warns_when_gemini_initialization_fails(self) -> None:
         with patch.dict(os.environ, {"GEMINI_API_KEY": "test-key"}, clear=True):
@@ -204,6 +233,8 @@ class LLMClientTests(unittest.TestCase):
 
         self.assertTrue(result.used_fallback)
         self.assertIn("OPENAI_API_KEY", result.warning)
+        self.assertIn("missing_env=OPENAI_API_KEY", result.warning)
+        self.assertIn("request_attempted=no", result.warning)
 
     def test_build_ranker_from_env_warns_when_openai_base_url_is_missing(self) -> None:
         with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}, clear=True):
@@ -228,6 +259,25 @@ class LLMClientTests(unittest.TestCase):
 
         self.assertTrue(result.used_fallback)
         self.assertIn("bad init", result.warning)
+
+    def test_build_ranker_from_env_reports_dependency_missing_during_openai_initialization(self) -> None:
+        env = {
+            "OPENAI_API_KEY": "test-key",
+            "OPENAI_BASE_URL": "https://example.com/v1",
+            "OPENAI_MODEL": "gpt-5.2-mini",
+        }
+
+        with patch.dict(os.environ, env, clear=True):
+            with patch.object(llm_module, "OpenAI", None):
+                ranker = build_ranker_from_env("openai")
+
+        result = ranker.rank_words("boat", ["Anchor", "Harbor", "Orbit"])
+
+        self.assertTrue(result.used_fallback)
+        self.assertIn("category=dependency-missing", result.warning)
+        self.assertIn("stage=initialization", result.warning)
+        self.assertIn("request_attempted=no", result.warning)
+        self.assertIn("base_url=https://example.com/v1", result.warning)
 
     def test_build_ranker_from_env_openai_mode_does_not_construct_gemini(self) -> None:
         env = {
@@ -290,6 +340,16 @@ class LLMClientTests(unittest.TestCase):
         self.assertFalse(result.attempted)
         self.assertFalse(result.success)
         self.assertIn("No API key.", result.detail)
+
+    def test_run_startup_probe_reports_status_code_and_request_id(self) -> None:
+        result = run_startup_probe(ResilientRanker(primary=StatusFailingPrimary()))
+
+        self.assertTrue(result.attempted)
+        self.assertFalse(result.success)
+        self.assertIn("status_code=401", result.detail)
+        self.assertIn("request_id=req_123", result.detail)
+        self.assertIn("api_error_code=invalid_api_key", result.detail)
+        self.assertIn("endpoint_reached=yes", result.detail)
 
     def test_format_startup_probe_message_includes_latency_and_ranking(self) -> None:
         message = format_startup_probe_message(

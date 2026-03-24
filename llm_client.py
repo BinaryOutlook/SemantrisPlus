@@ -152,6 +152,173 @@ def parse_ranked_words(response_text: str, expected_words: Sequence[str]) -> lis
     return validate_ranked_words(parsed_words, expected_words)
 
 
+def _clean_detail_value(value: Any) -> str | None:
+    if value is None:
+        return None
+
+    text = str(value).strip().replace("\n", " ")
+    if not text:
+        return None
+
+    return text
+
+
+def _extract_exception_payload(exc: Exception) -> dict[str, Any] | None:
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        return body
+
+    response = getattr(exc, "response", None)
+    json_method = getattr(response, "json", None)
+    if callable(json_method):
+        try:
+            payload = json_method()
+        except Exception:
+            payload = None
+        if isinstance(payload, dict):
+            return payload
+
+    return None
+
+
+def _extract_api_error_fields(exc: Exception) -> dict[str, str]:
+    payload = _extract_exception_payload(exc)
+    if not isinstance(payload, dict):
+        return {}
+
+    error_payload = payload.get("error")
+    if not isinstance(error_payload, dict):
+        return {}
+
+    extracted: dict[str, str] = {}
+    for source_key, target_key in (
+        ("type", "api_error_type"),
+        ("code", "api_error_code"),
+        ("status", "api_status"),
+        ("param", "api_error_param"),
+    ):
+        text = _clean_detail_value(error_payload.get(source_key))
+        if text is not None:
+            extracted[target_key] = text
+
+    return extracted
+
+
+def _infer_failure_shape(exc: Exception, stage: str) -> tuple[str, str, str]:
+    message = str(exc).casefold()
+    type_name = exc.__class__.__name__.casefold()
+    status_code = getattr(exc, "status_code", None)
+
+    if stage in {"configuration", "initialization"}:
+        if "install the openai package" in message or "install the google-genai package" in message:
+            return ("dependency-missing", "no", "no")
+        return (stage, "no", "no")
+
+    if status_code is not None:
+        if status_code == 400:
+            category = "bad-request"
+        elif status_code == 401:
+            category = "authentication"
+        elif status_code == 403:
+            category = "permission-denied"
+        elif status_code == 404:
+            category = "not-found"
+        elif status_code == 422:
+            category = "unprocessable-entity"
+        elif status_code == 429:
+            category = "rate-limit"
+        elif status_code >= 500:
+            category = "server-error"
+        else:
+            category = "api-status-error"
+        return (category, "yes", "yes")
+
+    if "connection" in type_name or "timeout" in type_name:
+        return ("connection", "yes", "no")
+
+    if isinstance(exc, RankingError):
+        return ("response-validation", "yes", "yes")
+
+    return ("runtime-error", "yes", "unknown")
+
+
+def _provider_context(primary: PrimaryRanker | None) -> dict[str, Any]:
+    if primary is None:
+        return {}
+
+    return {
+        "model_name": getattr(primary, "model_name", None),
+        "base_url": getattr(primary, "base_url", None),
+    }
+
+
+def format_provider_diagnostic(
+    exc: Exception,
+    *,
+    provider: str,
+    stage: str,
+    context: dict[str, Any] | None = None,
+) -> str:
+    category, request_attempted, endpoint_reached = _infer_failure_shape(exc, stage)
+    parts = [
+        f"provider={provider}",
+        f"stage={stage}",
+        f"category={category}",
+        f"request_attempted={request_attempted}",
+        f"endpoint_reached={endpoint_reached}",
+        f"type={exc.__class__.__name__}",
+    ]
+
+    status_code = getattr(exc, "status_code", None)
+    if status_code is not None:
+        parts.append(f"status_code={status_code}")
+
+    request_id = _clean_detail_value(getattr(exc, "request_id", None))
+    if request_id is not None:
+        parts.append(f"request_id={request_id}")
+
+    cause = getattr(exc, "__cause__", None)
+    if cause is not None:
+        parts.append(f"cause_type={cause.__class__.__name__}")
+
+    for key, value in _extract_api_error_fields(exc).items():
+        parts.append(f"{key}={value}")
+
+    for key, value in (context or {}).items():
+        cleaned = _clean_detail_value(value)
+        if cleaned is not None:
+            parts.append(f"{key}={cleaned}")
+
+    message = _clean_detail_value(exc)
+    if message is not None:
+        parts.append(f"message={message}")
+
+    return "; ".join(parts)
+
+
+def format_configuration_diagnostic(
+    *,
+    provider: str,
+    missing_env: str,
+    context: dict[str, Any] | None = None,
+) -> str:
+    parts = [
+        f"provider={provider}",
+        "stage=configuration",
+        "category=missing-config",
+        "request_attempted=no",
+        "endpoint_reached=no",
+        f"missing_env={missing_env}",
+    ]
+
+    for key, value in (context or {}).items():
+        cleaned = _clean_detail_value(value)
+        if cleaned is not None:
+            parts.append(f"{key}={cleaned}")
+
+    return "; ".join(parts)
+
+
 def _value_from_attr_or_key(value: Any, key: str) -> Any:
     if isinstance(value, dict):
         return value.get(key)
@@ -319,7 +486,15 @@ class ResilientRanker:
                     latency_ms=latency_ms,
                     provider=self.fallback.provider,
                     used_fallback=True,
-                    warning=f"Primary ranking provider failed: {exc}",
+                    warning=(
+                        "Primary ranking provider failed. "
+                        + format_provider_diagnostic(
+                            exc,
+                            provider=getattr(self.primary, "provider", "primary"),
+                            stage="ranking",
+                            context=_provider_context(self.primary),
+                        )
+                    ),
                 )
 
         fallback_words = self.fallback.rank_words(clue, words)
@@ -345,7 +520,12 @@ def _build_gemini_ranker_from_env() -> ResilientRanker:
             primary=None,
             initial_warning=(
                 "Gemini mode is not configured because GEMINI_API_KEY is missing, "
-                "so the local fallback ranker was used."
+                "so the local fallback ranker was used. "
+                + format_configuration_diagnostic(
+                    provider="gemini",
+                    missing_env="GEMINI_API_KEY",
+                    context={"model_name": model_name},
+                )
             ),
         )
 
@@ -355,7 +535,15 @@ def _build_gemini_ranker_from_env() -> ResilientRanker:
     except Exception as exc:
         return ResilientRanker(
             primary=None,
-            initial_warning=f"Gemini initialization failed, so the local fallback ranker was used: {exc}",
+            initial_warning=(
+                "Gemini initialization failed, so the local fallback ranker was used. "
+                + format_provider_diagnostic(
+                    exc,
+                    provider="gemini",
+                    stage="initialization",
+                    context={"model_name": model_name},
+                )
+            ),
         )
 
 
@@ -369,7 +557,12 @@ def _build_openai_ranker_from_env() -> ResilientRanker:
             primary=None,
             initial_warning=(
                 "OpenAI mode is not configured because OPENAI_API_KEY is missing, "
-                "so the local fallback ranker was used."
+                "so the local fallback ranker was used. "
+                + format_configuration_diagnostic(
+                    provider="openai",
+                    missing_env="OPENAI_API_KEY",
+                    context={"model_name": model_name, "base_url": base_url},
+                )
             ),
         )
 
@@ -378,7 +571,12 @@ def _build_openai_ranker_from_env() -> ResilientRanker:
             primary=None,
             initial_warning=(
                 "OpenAI mode is not configured because OPENAI_BASE_URL is missing, "
-                "so the local fallback ranker was used."
+                "so the local fallback ranker was used. "
+                + format_configuration_diagnostic(
+                    provider="openai",
+                    missing_env="OPENAI_BASE_URL",
+                    context={"model_name": model_name},
+                )
             ),
         )
 
@@ -392,7 +590,15 @@ def _build_openai_ranker_from_env() -> ResilientRanker:
     except Exception as exc:
         return ResilientRanker(
             primary=None,
-            initial_warning=f"OpenAI initialization failed, so the local fallback ranker was used: {exc}",
+            initial_warning=(
+                "OpenAI initialization failed, so the local fallback ranker was used. "
+                + format_provider_diagnostic(
+                    exc,
+                    provider="openai",
+                    stage="initialization",
+                    context={"model_name": model_name, "base_url": base_url},
+                )
+            ),
         )
 
 
@@ -447,7 +653,12 @@ def run_startup_probe(
             provider=getattr(ranker.primary, "provider", "primary"),
             model_name=getattr(ranker.primary, "model_name", None),
             latency_ms=latency_ms,
-            detail=str(exc),
+            detail=format_provider_diagnostic(
+                exc,
+                provider=getattr(ranker.primary, "provider", "primary"),
+                stage="startup-probe",
+                context=_provider_context(ranker.primary),
+            ),
         )
 
 
