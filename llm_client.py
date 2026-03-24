@@ -44,6 +44,17 @@ class RankingResult:
     warning: str | None = None
 
 
+@dataclass(frozen=True)
+class StartupProbeResult:
+    attempted: bool
+    success: bool
+    provider: str
+    model_name: str | None
+    latency_ms: int | None
+    detail: str
+    ranked_words: tuple[str, ...] = ()
+
+
 class RankedWordsPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -136,6 +147,10 @@ class GeminiRanker:
             "response_mime_type": "application/json",
             "response_json_schema": RankedWordsPayload.model_json_schema(),
         }
+
+    @property
+    def model_name(self) -> str:
+        return self._model_name
 
     def rank_words(self, clue: str, words: Sequence[str]) -> list[str]:
         prompt = PROMPT_TEMPLATE.format(
@@ -240,3 +255,71 @@ def build_ranker_from_env() -> ResilientRanker:
             primary=None,
             initial_warning=f"Gemini initialization failed, so the local fallback ranker was used: {exc}",
         )
+
+
+def run_startup_probe(
+    ranker: ResilientRanker,
+    *,
+    clue: str = "flight",
+    words: Sequence[str] = ("Runway", "Anchor", "Forest"),
+) -> StartupProbeResult:
+    if ranker.primary is None:
+        return StartupProbeResult(
+            attempted=False,
+            success=False,
+            provider="gemini",
+            model_name=None,
+            latency_ms=None,
+            detail=ranker.initial_warning
+            or "Gemini is not configured, so the startup probe was skipped.",
+        )
+
+    start = time.perf_counter()
+    try:
+        ranked_words = tuple(ranker.primary.rank_words(clue, words))
+        latency_ms = round((time.perf_counter() - start) * 1000)
+        return StartupProbeResult(
+            attempted=True,
+            success=True,
+            provider=ranker.primary.provider,
+            model_name=ranker.primary.model_name,
+            latency_ms=latency_ms,
+            detail="Gemini responded successfully to the startup probe.",
+            ranked_words=ranked_words,
+        )
+    except Exception as exc:
+        latency_ms = round((time.perf_counter() - start) * 1000)
+        return StartupProbeResult(
+            attempted=True,
+            success=False,
+            provider=getattr(ranker.primary, "provider", "gemini"),
+            model_name=getattr(ranker.primary, "model_name", None),
+            latency_ms=latency_ms,
+            detail=str(exc),
+        )
+
+
+def format_startup_probe_message(result: StartupProbeResult) -> str:
+    prefix = "[Startup Probe]"
+
+    if not result.attempted:
+        return f"{prefix} Gemini probe skipped. {result.detail}"
+
+    model_suffix = f" ({result.model_name})" if result.model_name else ""
+    latency_suffix = f" in {result.latency_ms} ms" if result.latency_ms is not None else ""
+
+    if result.success:
+        ranked_suffix = (
+            f" Sample ranking: {', '.join(result.ranked_words)}."
+            if result.ranked_words
+            else ""
+        )
+        return (
+            f"{prefix} Gemini reachable via {result.provider}{model_suffix}{latency_suffix}. "
+            f"{result.detail}{ranked_suffix}"
+        )
+
+    return (
+        f"{prefix} Gemini probe failed via {result.provider}{model_suffix}{latency_suffix}. "
+        f"{result.detail}"
+    )

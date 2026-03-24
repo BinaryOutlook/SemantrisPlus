@@ -15,7 +15,7 @@ from game_logic import (
     initialize_game_state,
     resolve_turn,
 )
-from llm_client import build_ranker_from_env, normalize_word
+from llm_client import build_ranker_from_env, format_startup_probe_message, normalize_word, run_startup_probe
 
 load_dotenv()
 
@@ -310,7 +310,21 @@ def _build_turn_message(
     return "Miss. Tower reordered."
 
 
+def should_run_startup_probe(debug_mode: bool) -> bool:
+    if os.getenv("SEMANTRIS_SKIP_LLM_STARTUP_PROBE", "0") == "1":
+        return False
+
+    if not debug_mode:
+        return True
+
+    return os.getenv("WERKZEUG_RUN_MAIN") == "true"
+
+
 if __name__ == "__main__":
     debug_mode = os.getenv("FLASK_DEBUG", "1") == "1"
     port = int(os.getenv("PORT", "5001"))
+
+    if should_run_startup_probe(debug_mode):
+        print(format_startup_probe_message(run_startup_probe(RANKER)), flush=True)
+
     app.run(debug=debug_mode, port=port)

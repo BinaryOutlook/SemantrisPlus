@@ -63,6 +63,17 @@ class AppRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn(b"Unknown vocabulary pack.", response.data)
 
+    def test_should_run_startup_probe_respects_skip_env_and_reloader(self) -> None:
+        with patch.dict("os.environ", {"SEMANTRIS_SKIP_LLM_STARTUP_PROBE": "1"}, clear=False):
+            self.assertFalse(app_module.should_run_startup_probe(debug_mode=False))
+
+        with patch.dict("os.environ", {}, clear=True):
+            self.assertTrue(app_module.should_run_startup_probe(debug_mode=False))
+            self.assertFalse(app_module.should_run_startup_probe(debug_mode=True))
+
+        with patch.dict("os.environ", {"WERKZEUG_RUN_MAIN": "true"}, clear=True):
+            self.assertTrue(app_module.should_run_startup_probe(debug_mode=True))
+
     def test_state_endpoint_initializes_session(self) -> None:
         response = self.client.get("/api/game/state")
         payload = response.get_json()
