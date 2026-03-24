@@ -1,32 +1,41 @@
 import os
-import time
-import requests
 import statistics
+import time
+
+import requests
 from dotenv import load_dotenv
 
-# Load .env variables
 load_dotenv()
 
-# Import Gemini + OpenAI clients
 try:
     from google import genai
 except Exception:  # pragma: no cover - import safety only
     genai = None
 
-from openai import OpenAI
+try:
+    from openai import OpenAI
+except Exception:  # pragma: no cover - import safety only
+    OpenAI = None
 
 
-# ============================================================
-#                CONFIGURATION
-# ============================================================
-
-API_PROVIDER = "OPENAI"     # "OPENAI" / "GEMINI" / "MOCK"
+API_PROVIDER = os.getenv("SEMANTRIS_LLM_PROVIDER", "gemini").strip().lower()
 
 NUM_REQUESTS = 10
 CLUE = "Watercraft"
-WORDS = ["Harbor", "Signal", "Forest", "Circuit", "Embassy",
-         "Runway", "Gallery", "Cipher", "Orbit", "Station",
-         "Contract", "Anchor"]
+WORDS = [
+    "Harbor",
+    "Signal",
+    "Forest",
+    "Circuit",
+    "Embassy",
+    "Runway",
+    "Gallery",
+    "Cipher",
+    "Orbit",
+    "Station",
+    "Contract",
+    "Anchor",
+]
 
 MOCK_URL = "https://httpbin.org/post"
 
@@ -36,35 +45,23 @@ Return ONLY the single best (most related) word.
 
 Clue: {clue}
 Words: {words}
-"""
+""".strip()
 
-
-# ============================================================
-#             LLM CLIENT ABSTRACTIONS
-# ============================================================
 
 class LLMClientBase:
-    """Base interface for all providers."""
     def generate(self, prompt: str) -> str:
         raise NotImplementedError
 
 
-# -------------------- MOCK PROVIDER -------------------------
-
 class MockClient(LLMClientBase):
     def generate(self, prompt: str) -> str:
-        """
-        We do NOT call LLM here, instead we only call httpbin to measure pure network latency.
-        """
         response = requests.post(MOCK_URL, json={"prompt": prompt}, timeout=15)
         response.raise_for_status()
         return "mock-result"
 
 
-# -------------------- GEMINI PROVIDER ------------------------
-
 class GeminiClient(LLMClientBase):
-    def __init__(self, model="gemini-2.5-flash-lite"):
+    def __init__(self, model: str | None = None):
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
             raise ValueError("GEMINI_API_KEY not set in environment")
@@ -72,7 +69,7 @@ class GeminiClient(LLMClientBase):
             raise RuntimeError("google-genai is not installed")
 
         self.client = genai.Client(api_key=api_key)
-        self.model = model
+        self.model = model or os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
         self.config = {
             "temperature": 0.0,
             "max_output_tokens": 20,
@@ -87,53 +84,45 @@ class GeminiClient(LLMClientBase):
         return response.text.strip()
 
 
-# -------------------- OPENAI (SILICONFLOW) PROVIDER ------------------------
-
 class OpenAIClient(LLMClientBase):
-    def __init__(self, model="Pro/deepseek-ai/DeepSeek-V3.2-Exp"):
-    # def __init__(self, model="Qwen/Qwen3-VL-32B-Instruct"):
-
-        
-        # 1. Load the key into a variable
-        api_key = os.getenv("SiliconFlow_API_KEY")
+    def __init__(self, model: str | None = None, base_url: str | None = None):
+        api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
-            raise ValueError("SiliconFlow_API_KEY not set in environment")
+            raise ValueError("OPENAI_API_KEY not set in environment")
+        if OpenAI is None:
+            raise RuntimeError("openai is not installed")
 
-        # IMPORTANT: set SiliconFlow base URL
+        resolved_base_url = base_url or os.getenv("OPENAI_BASE_URL")
+        if not resolved_base_url:
+            raise ValueError("OPENAI_BASE_URL not set in environment")
+
         self.client = OpenAI(
-            api_key=api_key,  # <--- FIX 1: Use the 'api_key' variable defined above
-            base_url="https://api.siliconflow.cn/v1" # <--- CHANGED from .com to .cn
+            api_key=api_key,
+            base_url=resolved_base_url,
         )
-
-        self.model = model
+        self.model = model or os.getenv("OPENAI_MODEL", "gpt-5.2-mini")
 
     def generate(self, prompt: str) -> str:
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=20,
-            temperature=0.0
+            temperature=0.0,
         )
-
-        # Extract answer text
-        # <--- FIX 2: Access content as an attribute (.content) not a dict key (["content"])
         return response.choices[0].message.content.strip()
 
-# ============================================================
-#               LATENCY TESTING ENGINE
-# ============================================================
 
-def test_latency(llm: LLMClientBase, num=NUM_REQUESTS):
+def test_latency(llm: LLMClientBase, num: int = NUM_REQUESTS):
     latencies = []
 
     print("\n--- Starting Latency Test ---")
     print(f"API Provider: {API_PROVIDER}")
     print(f"Requests: {num}\n")
 
-    prompt = PROMPT_TEMPLATE.format(clue=CLUE, words=str(WORDS)) # Ensure words are stringified for prompt
+    prompt = PROMPT_TEMPLATE.format(clue=CLUE, words=str(WORDS))
 
-    for i in range(num):
-        print(f"Sending request {i+1}/{num}...", end="", flush=True)
+    for index in range(num):
+        print(f"Sending request {index + 1}/{num}...", end="", flush=True)
 
         start = time.perf_counter()
         try:
@@ -143,16 +132,15 @@ def test_latency(llm: LLMClientBase, num=NUM_REQUESTS):
 
             latencies.append(duration_ms)
             print(f" Success: {duration_ms:.2f} ms  (Top word: {result})")
-
-        except Exception as e:
-            print(f" FAILED: {e}")
+        except Exception as exc:
+            print(f" FAILED: {exc}")
 
         time.sleep(0.5)
 
     return latencies
 
 
-def print_stats(latencies):
+def print_stats(latencies) -> None:
     if not latencies:
         print("\nNo successful requests.")
         return
@@ -164,25 +152,15 @@ def print_stats(latencies):
     print(f"Max:     {max(latencies):.2f} ms")
 
 
-# ============================================================
-#                      MAIN LOGIC
-# ============================================================
-
 if __name__ == "__main__":
-
-    # Select provider
-    if API_PROVIDER == "MOCK":
+    if API_PROVIDER == "mock":
         client = MockClient()
-
-    elif API_PROVIDER == "GEMINI":
+    elif API_PROVIDER == "gemini":
         client = GeminiClient()
-
-    elif API_PROVIDER == "OPENAI":
+    elif API_PROVIDER == "openai":
         client = OpenAIClient()
-
     else:
-        raise ValueError(f"Unknown API_PROVIDER: {API_PROVIDER}")
+        raise ValueError("Unknown SEMANTRIS_LLM_PROVIDER. Expected 'gemini', 'openai', or 'mock'.")
 
-    # Run latency test
-    lat = test_latency(client)
-    print_stats(lat)
+    latencies = test_latency(client)
+    print_stats(latencies)

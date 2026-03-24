@@ -44,7 +44,7 @@ Modern LLMs are not deterministic ranking machines, and that matters. Even at lo
 
 That said, for short clue-and-word ranking tasks, modern models are strong enough to make this design space genuinely fun again. Their broader world knowledge also makes the game more flexible across themed vocab packs and future content expansions.
 
-This repo currently uses Gemini as the primary ranking provider and includes a local heuristic fallback so the game remains playable if the model path fails.
+This repo supports two remote ranking modes: Gemini through Google’s Gen AI SDK, and an OpenAI-compatible mode through the `openai` Python client. The selected provider is chosen at startup, and the game still includes a local heuristic fallback so the app remains playable if the configured model path fails.
 
 ## Project Status
 
@@ -70,7 +70,7 @@ What is still unfinished:
 - broader frontend test coverage across full interaction flows
 - leaderboard or persistence systems
 - stronger fallback ranking quality
-- model selection tuning between Gemini Flash-Lite and Flash
+- model selection tuning across Gemini and OpenAI-compatible providers
 
 ## Architecture
 
@@ -101,11 +101,12 @@ This repository is now structured around clear responsibilities instead of mixin
 SemantrisPlus/
 ├── app.py                 # Flask app, route wiring, session serialization
 ├── game_logic.py          # Pure board/session rules
-├── llm_client.py          # Google Gen AI integration, validation, fallback ranking
+├── llm_client.py          # Provider integration, validation, and fallback ranking
 ├── brief.md               # Contractor-facing project brief and roadmap
 ├── GeminiMoving.md        # Migration evaluation and decision record
 ├── README.md              # Project overview and setup
 ├── requirements.txt       # Python dependencies
+├── .env.example           # Environment variable template
 ├── assets/                # Vocabulary packs
 │   ├── aviation_1.txt
 │   ├── basic_vocab.txt
@@ -131,7 +132,8 @@ SemantrisPlus/
 │   └── api_latency.py     # Optional provider latency experiment
 └── tests/
     ├── test_app.py        # API contract tests
-    └── test_game_logic.py # Gameplay rule tests
+    ├── test_game_logic.py # Gameplay rule tests
+    └── test_llm_client.py # Provider selection and fallback tests
 ```
 
 ## Tech Stack
@@ -144,6 +146,7 @@ SemantrisPlus/
 - custom CSS
 - system-aware light/dark theming with manual override
 - Google Gemini API via the Google Gen AI SDK
+- OpenAI-compatible model access via the OpenAI Python client
 - `unittest` for automated tests
 - Vitest for frontend unit and DOM tests
 
@@ -161,7 +164,15 @@ npm install
 Create a `.env` file in the project root:
 
 ```env
-GEMINI_API_KEY="YOUR_API_KEY"
+SEMANTRIS_LLM_PROVIDER="gemini"
+
+GEMINI_API_KEY="YOUR_GEMINI_API_KEY"
+GEMINI_MODEL="gemini-2.5-flash-lite"
+
+OPENAI_API_KEY="YOUR_OPENAI_API_KEY"
+OPENAI_BASE_URL="https://api.openai.com/v1"
+OPENAI_MODEL="gpt-5.2-mini"
+
 FLASK_SECRET_KEY="YOUR_SECRET_KEY"
 ```
 
@@ -169,10 +180,11 @@ Optional configuration:
 
 ```env
 SEMANTRIS_VOCAB_FILE="assets/general_1.txt"
-GEMINI_MODEL="gemini-2.5-flash-lite"
 PORT="5001"
 FLASK_DEBUG="1"
 ```
+
+A starter template is also available at `.env.example`.
 
 ### 3. Run the app
 
@@ -231,9 +243,24 @@ SEMANTRIS_VOCAB_FILE="assets/aviation_1.txt"
 
 ### Ranking provider
 
-The game currently prefers Gemini through Google’s supported `google-genai` client. The backend requests structured JSON output from Gemini and then validates that the ranking is still a correct permutation of the current board before resolving the turn.
+Choose the active remote provider with:
 
-If Gemini is unavailable, fails validation, or cannot initialize, the backend falls back to a deterministic local heuristic ranker so the session does not hard-fail.
+```env
+SEMANTRIS_LLM_PROVIDER="gemini"
+```
+
+Supported values:
+
+- `gemini`
+- `openai`
+
+When `gemini` mode is active, the backend uses Google’s supported `google-genai` client and requests structured JSON output with schema validation.
+
+When `openai` mode is active, the backend uses the `openai` Python client and can target either OpenAI itself or any OpenAI-compatible endpoint through `OPENAI_BASE_URL`.
+
+Only one remote provider is active per process. The app does not fail over from one remote provider to the other at runtime.
+
+If the configured remote provider is unavailable, fails validation, or cannot initialize, the backend falls back to a deterministic local heuristic ranker so the session does not hard-fail.
 
 This fallback is intentionally simple. It is a resilience feature, not a semantic replacement for the primary model.
 

@@ -5,6 +5,7 @@ from unittest.mock import patch
 import llm_client as llm_module
 from llm_client import (
     GeminiRanker,
+    OpenAICompatibleRanker,
     RankingError,
     ResilientRanker,
     build_ranker_from_env,
@@ -14,14 +15,14 @@ from llm_client import (
 )
 
 
-class FakeResponse:
-    def __init__(self, text="", parsed=None):
+class FakeGeminiResponse:
+    def __init__(self, text: str = "", parsed=None):
         self.text = text
         self.parsed = parsed
 
 
-class FakeModels:
-    def __init__(self, response):
+class FakeGeminiModels:
+    def __init__(self, response: FakeGeminiResponse):
         self.response = response
         self.calls = []
 
@@ -36,13 +37,52 @@ class FakeModels:
         return self.response
 
 
-class FakeClient:
-    def __init__(self, response):
-        self.models = FakeModels(response)
+class FakeGeminiClient:
+    def __init__(self, response: FakeGeminiResponse):
+        self.models = FakeGeminiModels(response)
+
+
+class FakeOpenAIMessage:
+    def __init__(self, content):
+        self.content = content
+
+
+class FakeOpenAIChoice:
+    def __init__(self, message: FakeOpenAIMessage):
+        self.message = message
+
+
+class FakeOpenAICompletion:
+    def __init__(self, content):
+        self.choices = [FakeOpenAIChoice(FakeOpenAIMessage(content))]
+
+
+class FakeOpenAICompletions:
+    def __init__(self, response: FakeOpenAICompletion):
+        self.response = response
+        self.calls = []
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        return self.response
+
+
+class FakeOpenAIChat:
+    def __init__(self, response: FakeOpenAICompletion):
+        self.completions = FakeOpenAICompletions(response)
+
+
+class FakeOpenAIClient:
+    def __init__(self, response: FakeOpenAICompletion):
+        self.chat = FakeOpenAIChat(response)
 
 
 class ExplodingPrimary:
     provider = "gemini"
+
+    @property
+    def model_name(self) -> str:
+        return "exploding-primary"
 
     def rank_words(self, clue, words):
         raise RankingError("provider exploded")
@@ -68,11 +108,11 @@ class LLMClientTests(unittest.TestCase):
             )
 
     def test_gemini_ranker_uses_structured_output_config(self) -> None:
-        response = FakeResponse(
+        response = FakeGeminiResponse(
             parsed={"ranked_words": ["Anchor", "Orbit", "Harbor"]},
             text='{"ranked_words": ["Anchor", "Orbit", "Harbor"]}',
         )
-        client = FakeClient(response)
+        client = FakeGeminiClient(response)
         ranker = GeminiRanker(
             api_key="test-key",
             model_name="gemini-2.5-flash-lite",
@@ -86,6 +126,48 @@ class LLMClientTests(unittest.TestCase):
         self.assertEqual(client.models.calls[0]["config"]["response_mime_type"], "application/json")
         self.assertIn("response_json_schema", client.models.calls[0]["config"])
 
+    def test_openai_ranker_accepts_json_content(self) -> None:
+        response = FakeOpenAICompletion('{"ranked_words": ["Anchor", "Orbit", "Harbor"]}')
+        client = FakeOpenAIClient(response)
+        ranker = OpenAICompatibleRanker(
+            api_key="test-key",
+            base_url="https://example.com/v1",
+            model_name="gpt-5.2-mini",
+            client=client,
+        )
+
+        ranked = ranker.rank_words("boat", ["Anchor", "Harbor", "Orbit"])
+
+        self.assertEqual(ranked, ["Anchor", "Orbit", "Harbor"])
+        self.assertEqual(client.chat.completions.calls[0]["model"], "gpt-5.2-mini")
+        self.assertEqual(client.chat.completions.calls[0]["messages"][0]["role"], "system")
+        self.assertEqual(client.chat.completions.calls[0]["messages"][1]["role"], "user")
+
+    def test_openai_ranker_accepts_line_based_content(self) -> None:
+        response = FakeOpenAICompletion("Anchor\nOrbit\nHarbor")
+        ranker = OpenAICompatibleRanker(
+            api_key="test-key",
+            base_url="https://example.com/v1",
+            model_name="gpt-5.2-mini",
+            client=FakeOpenAIClient(response),
+        )
+
+        ranked = ranker.rank_words("boat", ["Anchor", "Harbor", "Orbit"])
+
+        self.assertEqual(ranked, ["Anchor", "Orbit", "Harbor"])
+
+    def test_openai_ranker_rejects_empty_content(self) -> None:
+        response = FakeOpenAICompletion("")
+        ranker = OpenAICompatibleRanker(
+            api_key="test-key",
+            base_url="https://example.com/v1",
+            model_name="gpt-5.2-mini",
+            client=FakeOpenAIClient(response),
+        )
+
+        with self.assertRaises(RankingError):
+            ranker.rank_words("boat", ["Anchor", "Harbor", "Orbit"])
+
     def test_resilient_ranker_falls_back_when_primary_fails_at_runtime(self) -> None:
         ranker = ResilientRanker(primary=ExplodingPrimary())
 
@@ -95,34 +177,102 @@ class LLMClientTests(unittest.TestCase):
         self.assertEqual(result.provider, "heuristic-fallback")
         self.assertIn("provider exploded", result.warning)
 
-    def test_build_ranker_from_env_warns_when_api_key_is_missing(self) -> None:
+    def test_build_ranker_from_env_warns_when_gemini_api_key_is_missing(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
-            ranker = build_ranker_from_env()
+            ranker = build_ranker_from_env("gemini")
 
         result = ranker.rank_words("boat", ["Anchor", "Harbor", "Orbit"])
 
         self.assertTrue(result.used_fallback)
         self.assertIn("GEMINI_API_KEY", result.warning)
 
-    def test_build_ranker_from_env_warns_when_primary_initialization_fails(self) -> None:
+    def test_build_ranker_from_env_warns_when_gemini_initialization_fails(self) -> None:
         with patch.dict(os.environ, {"GEMINI_API_KEY": "test-key"}, clear=True):
             with patch.object(llm_module, "GeminiRanker", side_effect=RankingError("bad init")):
-                ranker = build_ranker_from_env()
+                ranker = build_ranker_from_env("gemini")
 
         result = ranker.rank_words("boat", ["Anchor", "Harbor", "Orbit"])
 
         self.assertTrue(result.used_fallback)
         self.assertIn("bad init", result.warning)
 
+    def test_build_ranker_from_env_warns_when_openai_api_key_is_missing(self) -> None:
+        with patch.dict(os.environ, {}, clear=True):
+            ranker = build_ranker_from_env("openai")
+
+        result = ranker.rank_words("boat", ["Anchor", "Harbor", "Orbit"])
+
+        self.assertTrue(result.used_fallback)
+        self.assertIn("OPENAI_API_KEY", result.warning)
+
+    def test_build_ranker_from_env_warns_when_openai_base_url_is_missing(self) -> None:
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}, clear=True):
+            ranker = build_ranker_from_env("openai")
+
+        result = ranker.rank_words("boat", ["Anchor", "Harbor", "Orbit"])
+
+        self.assertTrue(result.used_fallback)
+        self.assertIn("OPENAI_BASE_URL", result.warning)
+
+    def test_build_ranker_from_env_warns_when_openai_initialization_fails(self) -> None:
+        env = {
+            "OPENAI_API_KEY": "test-key",
+            "OPENAI_BASE_URL": "https://example.com/v1",
+        }
+
+        with patch.dict(os.environ, env, clear=True):
+            with patch.object(llm_module, "OpenAICompatibleRanker", side_effect=RankingError("bad init")):
+                ranker = build_ranker_from_env("openai")
+
+        result = ranker.rank_words("boat", ["Anchor", "Harbor", "Orbit"])
+
+        self.assertTrue(result.used_fallback)
+        self.assertIn("bad init", result.warning)
+
+    def test_build_ranker_from_env_openai_mode_does_not_construct_gemini(self) -> None:
+        env = {
+            "OPENAI_API_KEY": "test-key",
+            "OPENAI_BASE_URL": "https://example.com/v1",
+            "OPENAI_MODEL": "gpt-5.2-mini",
+        }
+        stub_ranker = object()
+
+        with patch.dict(os.environ, env, clear=True):
+            with patch.object(llm_module, "GeminiRanker", side_effect=AssertionError("should not build Gemini")):
+                with patch.object(llm_module, "OpenAICompatibleRanker", return_value=stub_ranker) as patched_openai:
+                    ranker = build_ranker_from_env("openai")
+
+        self.assertIs(ranker.primary, stub_ranker)
+        patched_openai.assert_called_once()
+
+    def test_build_ranker_from_env_gemini_mode_does_not_construct_openai(self) -> None:
+        env = {
+            "GEMINI_API_KEY": "test-key",
+            "GEMINI_MODEL": "gemini-2.5-flash-lite",
+        }
+        stub_ranker = object()
+
+        with patch.dict(os.environ, env, clear=True):
+            with patch.object(llm_module, "OpenAICompatibleRanker", side_effect=AssertionError("should not build OpenAI")):
+                with patch.object(llm_module, "GeminiRanker", return_value=stub_ranker) as patched_gemini:
+                    ranker = build_ranker_from_env("gemini")
+
+        self.assertIs(ranker.primary, stub_ranker)
+        patched_gemini.assert_called_once()
+
+    def test_build_ranker_from_env_rejects_unknown_provider(self) -> None:
+        with self.assertRaises(ValueError):
+            build_ranker_from_env("not-a-provider")
+
     def test_run_startup_probe_reports_success_for_primary(self) -> None:
-        response = FakeResponse(
+        response = FakeGeminiResponse(
             parsed={"ranked_words": ["Runway", "Anchor", "Forest"]},
             text='{"ranked_words": ["Runway", "Anchor", "Forest"]}',
         )
         primary = GeminiRanker(
             api_key="test-key",
             model_name="gemini-2.5-flash-lite",
-            client=FakeClient(response),
+            client=FakeGeminiClient(response),
         )
 
         result = run_startup_probe(ResilientRanker(primary=primary))
@@ -146,16 +296,18 @@ class LLMClientTests(unittest.TestCase):
             llm_module.StartupProbeResult(
                 attempted=True,
                 success=True,
-                provider="gemini",
-                model_name="gemini-2.5-flash-lite",
+                provider="openai",
+                model_name="gpt-5.2-mini",
                 latency_ms=123,
-                detail="Gemini responded successfully to the startup probe.",
+                detail="Primary provider responded successfully to the startup probe.",
                 ranked_words=("Runway", "Anchor", "Forest"),
             )
         )
 
+        self.assertIn("Provider reachable via openai", message)
         self.assertIn("123 ms", message)
         self.assertIn("Runway, Anchor, Forest", message)
+        self.assertNotIn("Gemini reachable", message)
 
 
 if __name__ == "__main__":

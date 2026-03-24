@@ -24,6 +24,7 @@ ASSETS_DIR = BASE_DIR / "assets"
 DEFAULT_VOCAB_FILE = ASSETS_DIR / "aviation_1.txt"
 CONFIGURED_VOCAB_FILE = Path(os.getenv("SEMANTRIS_VOCAB_FILE", str(DEFAULT_VOCAB_FILE)))
 SELECTED_PACK_SESSION_KEY = "selected_pack_id"
+ACTIVE_LLM_PROVIDER = os.getenv("SEMANTRIS_LLM_PROVIDER", "gemini").strip().lower()
 
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY") or os.urandom(24)
@@ -102,7 +103,7 @@ def resolve_default_pack_id(catalog: dict[str, VocabularyPack]) -> str:
 
 VOCABULARY_CATALOG = build_vocabulary_catalog(ASSETS_DIR)
 DEFAULT_VOCAB_PACK_ID = resolve_default_pack_id(VOCABULARY_CATALOG)
-RANKER = build_ranker_from_env()
+RANKER = build_ranker_from_env(provider_name=ACTIVE_LLM_PROVIDER)
 
 
 def selected_pack_id_from_session() -> str:

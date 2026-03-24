@@ -6,7 +6,7 @@ import re
 import time
 from dataclasses import dataclass
 from difflib import SequenceMatcher
-from typing import Any, Sequence
+from typing import Any, Protocol, Sequence
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
@@ -15,8 +15,13 @@ try:
 except Exception:  # pragma: no cover - import safety only
     genai = None
 
+try:
+    from openai import OpenAI
+except Exception:  # pragma: no cover - import safety only
+    OpenAI = None
 
-PROMPT_TEMPLATE = """
+
+SYSTEM_PROMPT = """
 You are the ranking engine for an arcade word association game.
 Rank the provided words from MOST related to LEAST related to the clue.
 
@@ -24,11 +29,15 @@ Rules:
 - Use every input word exactly once.
 - Preserve the original spelling of each word.
 - Return the ranking result only.
+""".strip()
 
-Clue: {clue}
-Words:
-{word_list}
-"""
+
+def render_ranking_input(clue: str, words: Sequence[str]) -> str:
+    return f"Clue: {clue.strip()}\nWords:\n" + "\n".join(words)
+
+
+def render_ranking_prompt(clue: str, words: Sequence[str]) -> str:
+    return f"{SYSTEM_PROMPT}\n\n{render_ranking_input(clue, words)}"
 
 
 class RankingError(RuntimeError):
@@ -59,6 +68,17 @@ class RankedWordsPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     ranked_words: list[str]
+
+
+class PrimaryRanker(Protocol):
+    provider: str
+
+    @property
+    def model_name(self) -> str:
+        ...
+
+    def rank_words(self, clue: str, words: Sequence[str]) -> list[str]:
+        ...
 
 
 def normalize_word(word: str) -> str:
@@ -132,6 +152,45 @@ def parse_ranked_words(response_text: str, expected_words: Sequence[str]) -> lis
     return validate_ranked_words(parsed_words, expected_words)
 
 
+def _value_from_attr_or_key(value: Any, key: str) -> Any:
+    if isinstance(value, dict):
+        return value.get(key)
+    return getattr(value, key, None)
+
+
+def _coerce_openai_message_content(content: Any) -> str:
+    if isinstance(content, str):
+        return content.strip()
+
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            text_value = _value_from_attr_or_key(item, "text")
+            if isinstance(text_value, str) and text_value.strip():
+                parts.append(text_value.strip())
+        return "\n".join(parts).strip()
+
+    return ""
+
+
+def _extract_openai_response_text(response: Any) -> str:
+    choices = _value_from_attr_or_key(response, "choices")
+    if not choices:
+        raise RankingError("Model returned no choices.")
+
+    first_choice = choices[0]
+    message = _value_from_attr_or_key(first_choice, "message")
+    if message is None:
+        raise RankingError("Model returned no message.")
+
+    content = _value_from_attr_or_key(message, "content")
+    text = _coerce_openai_message_content(content)
+    if not text:
+        raise RankingError("Model returned an empty response.")
+
+    return text
+
+
 class GeminiRanker:
     provider = "gemini"
 
@@ -153,13 +212,9 @@ class GeminiRanker:
         return self._model_name
 
     def rank_words(self, clue: str, words: Sequence[str]) -> list[str]:
-        prompt = PROMPT_TEMPLATE.format(
-            clue=clue.strip(),
-            word_list="\n".join(words),
-        )
         response = self._client.models.generate_content(
             model=self._model_name,
-            contents=prompt,
+            contents=render_ranking_prompt(clue, words),
             config=self._generation_config,
         )
         parsed_words = _parse_ranked_words_payload(getattr(response, "parsed", None))
@@ -171,6 +226,47 @@ class GeminiRanker:
             raise RankingError("Model returned an empty response.")
 
         return parse_ranked_words(text, words)
+
+
+class OpenAICompatibleRanker:
+    provider = "openai"
+
+    def __init__(
+        self,
+        api_key: str,
+        model_name: str,
+        base_url: str,
+        client: Any | None = None,
+    ) -> None:
+        if client is None and OpenAI is None:
+            raise RankingError("openai is not available. Install the openai package.")
+
+        self._client = client or OpenAI(api_key=api_key, base_url=base_url)
+        self._model_name = model_name
+        self._base_url = base_url
+        self._request_options = {
+            "temperature": 0.0,
+            "max_tokens": 512,
+        }
+
+    @property
+    def model_name(self) -> str:
+        return self._model_name
+
+    @property
+    def base_url(self) -> str:
+        return self._base_url
+
+    def rank_words(self, clue: str, words: Sequence[str]) -> list[str]:
+        completion = self._client.chat.completions.create(
+            model=self._model_name,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": render_ranking_input(clue, words)},
+            ],
+            **self._request_options,
+        )
+        return parse_ranked_words(_extract_openai_response_text(completion), words)
 
 
 class HeuristicRanker:
@@ -194,7 +290,7 @@ class HeuristicRanker:
 class ResilientRanker:
     def __init__(
         self,
-        primary: GeminiRanker | None,
+        primary: PrimaryRanker | None,
         fallback: HeuristicRanker | None = None,
         initial_warning: str | None = None,
     ) -> None:
@@ -233,18 +329,24 @@ class ResilientRanker:
             latency_ms=latency_ms,
             provider=self.fallback.provider,
             used_fallback=True,
-            warning=self.initial_warning or "Gemini is not configured, so the local fallback ranker was used.",
+            warning=(
+                self.initial_warning
+                or "Primary provider is not configured, so the local fallback ranker was used."
+            ),
         )
 
 
-def build_ranker_from_env() -> ResilientRanker:
+def _build_gemini_ranker_from_env() -> ResilientRanker:
     api_key = os.getenv("GEMINI_API_KEY")
     model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
 
     if not api_key:
         return ResilientRanker(
             primary=None,
-            initial_warning="Gemini is not configured because GEMINI_API_KEY is missing, so the local fallback ranker was used.",
+            initial_warning=(
+                "Gemini mode is not configured because GEMINI_API_KEY is missing, "
+                "so the local fallback ranker was used."
+            ),
         )
 
     try:
@@ -257,6 +359,56 @@ def build_ranker_from_env() -> ResilientRanker:
         )
 
 
+def _build_openai_ranker_from_env() -> ResilientRanker:
+    api_key = os.getenv("OPENAI_API_KEY")
+    base_url = os.getenv("OPENAI_BASE_URL")
+    model_name = os.getenv("OPENAI_MODEL", "gpt-5.2-mini")
+
+    if not api_key:
+        return ResilientRanker(
+            primary=None,
+            initial_warning=(
+                "OpenAI mode is not configured because OPENAI_API_KEY is missing, "
+                "so the local fallback ranker was used."
+            ),
+        )
+
+    if not base_url:
+        return ResilientRanker(
+            primary=None,
+            initial_warning=(
+                "OpenAI mode is not configured because OPENAI_BASE_URL is missing, "
+                "so the local fallback ranker was used."
+            ),
+        )
+
+    try:
+        primary = OpenAICompatibleRanker(
+            api_key=api_key,
+            model_name=model_name,
+            base_url=base_url,
+        )
+        return ResilientRanker(primary=primary)
+    except Exception as exc:
+        return ResilientRanker(
+            primary=None,
+            initial_warning=f"OpenAI initialization failed, so the local fallback ranker was used: {exc}",
+        )
+
+
+def build_ranker_from_env(provider_name: str) -> ResilientRanker:
+    normalized_provider = provider_name.strip().casefold()
+
+    if normalized_provider == "gemini":
+        return _build_gemini_ranker_from_env()
+    if normalized_provider == "openai":
+        return _build_openai_ranker_from_env()
+
+    raise ValueError(
+        "Unsupported SEMANTRIS_LLM_PROVIDER. Expected 'gemini' or 'openai'."
+    )
+
+
 def run_startup_probe(
     ranker: ResilientRanker,
     *,
@@ -267,11 +419,11 @@ def run_startup_probe(
         return StartupProbeResult(
             attempted=False,
             success=False,
-            provider="gemini",
+            provider="primary",
             model_name=None,
             latency_ms=None,
             detail=ranker.initial_warning
-            or "Gemini is not configured, so the startup probe was skipped.",
+            or "Primary provider is not configured, so the startup probe was skipped.",
         )
 
     start = time.perf_counter()
@@ -284,7 +436,7 @@ def run_startup_probe(
             provider=ranker.primary.provider,
             model_name=ranker.primary.model_name,
             latency_ms=latency_ms,
-            detail="Gemini responded successfully to the startup probe.",
+            detail="Primary provider responded successfully to the startup probe.",
             ranked_words=ranked_words,
         )
     except Exception as exc:
@@ -292,7 +444,7 @@ def run_startup_probe(
         return StartupProbeResult(
             attempted=True,
             success=False,
-            provider=getattr(ranker.primary, "provider", "gemini"),
+            provider=getattr(ranker.primary, "provider", "primary"),
             model_name=getattr(ranker.primary, "model_name", None),
             latency_ms=latency_ms,
             detail=str(exc),
@@ -303,7 +455,7 @@ def format_startup_probe_message(result: StartupProbeResult) -> str:
     prefix = "[Startup Probe]"
 
     if not result.attempted:
-        return f"{prefix} Gemini probe skipped. {result.detail}"
+        return f"{prefix} Provider probe skipped. {result.detail}"
 
     model_suffix = f" ({result.model_name})" if result.model_name else ""
     latency_suffix = f" in {result.latency_ms} ms" if result.latency_ms is not None else ""
@@ -315,11 +467,11 @@ def format_startup_probe_message(result: StartupProbeResult) -> str:
             else ""
         )
         return (
-            f"{prefix} Gemini reachable via {result.provider}{model_suffix}{latency_suffix}. "
+            f"{prefix} Provider reachable via {result.provider}{model_suffix}{latency_suffix}. "
             f"{result.detail}{ranked_suffix}"
         )
 
     return (
-        f"{prefix} Gemini probe failed via {result.provider}{model_suffix}{latency_suffix}. "
+        f"{prefix} Provider probe failed via {result.provider}{model_suffix}{latency_suffix}. "
         f"{result.detail}"
     )
