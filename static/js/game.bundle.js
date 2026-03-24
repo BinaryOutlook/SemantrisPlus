@@ -116,6 +116,21 @@
     });
     elements2.tower.replaceChildren(fragment);
   }
+  function resolveNumericPixels(value) {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  function syncStageMetrics(elements2, boardState) {
+    const dangerRows = Math.max(0, boardState.danger_zone_size);
+    const towerStyles = window.getComputedStyle(elements2.tower);
+    const chip = elements2.tower.querySelector(".word-chip");
+    const chipHeight = chip?.getBoundingClientRect().height ?? 0;
+    const rowGap = resolveNumericPixels(towerStyles.rowGap || towerStyles.gap || "0");
+    const paddingBottom = resolveNumericPixels(towerStyles.paddingBottom);
+    const zoneHeight = dangerRows > 0 ? paddingBottom + chipHeight * dangerRows + rowGap * Math.max(0, dangerRows - 1) : 0;
+    elements2.towerStage.style.setProperty("--danger-zone-height", `${zoneHeight}px`);
+    elements2.dangerZone.hidden = dangerRows === 0;
+  }
 
   // frontend/src/animations.ts
   async function animateBoardTransition(elements2, nextBoard, boardState, options = {}, prefersReducedMotion) {
@@ -334,6 +349,12 @@
   function initGameController(elements2) {
     const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const clientState = createClientState();
+    const syncCurrentStageMetrics = () => {
+      if (!clientState.currentState) {
+        return;
+      }
+      syncStageMetrics(elements2, clientState.currentState);
+    };
     async function handleTurn(result) {
       const currentState = clientState.currentState;
       if (!currentState) {
@@ -348,6 +369,7 @@
           { duration: animationTimings.miss },
           prefersReducedMotion
         );
+        syncStageMetrics(elements2, result.state);
         updateHud(elements2, clientState, result.state);
         setStatus(elements2, messageWithWarning(result), "miss");
         return;
@@ -372,6 +394,7 @@
         },
         prefersReducedMotion
       );
+      syncStageMetrics(elements2, result.state);
       updateHud(elements2, clientState, result.state);
       setStatus(elements2, messageWithWarning(result), "hit");
     }
@@ -379,6 +402,7 @@
       const payload = await loadGameState();
       updateHud(elements2, clientState, payload.state);
       renderBoard(elements2, payload.state.board, payload.state);
+      syncStageMetrics(elements2, payload.state);
       if (payload.state.game_over) {
         elements2.gameOverNewGameButton.focus();
         return;
@@ -394,6 +418,7 @@
         const payload = await createNewGame();
         updateHud(elements2, clientState, payload.state);
         renderBoard(elements2, payload.state.board, payload.state);
+        syncStageMetrics(elements2, payload.state);
         elements2.clueInput.value = "";
         setStatus(elements2, payload.message, "neutral");
       } catch (error) {
@@ -438,6 +463,12 @@
     elements2.gameOverNewGameButton.addEventListener("click", () => {
       void startNewGame();
     });
+    window.addEventListener("resize", syncCurrentStageMetrics);
+    if ("fonts" in document) {
+      void document.fonts.ready.then(() => {
+        syncCurrentStageMetrics();
+      });
+    }
     void loadState().catch((error) => {
       setStatus(elements2, getErrorMessage(error), "error");
     });
@@ -471,6 +502,7 @@
       lastClueValue: requireElement("last-clue-value", documentRef),
       tower: requireElement("tower", documentRef),
       towerStage: requireElement("tower-stage", documentRef),
+      dangerZone: requireElement("danger-zone", documentRef),
       effectsLayer: requireElement("effects-layer", documentRef),
       gameOverModal: requireElement("game-over-modal", documentRef),
       gameOverTitle: requireElement("game-over-title", documentRef),

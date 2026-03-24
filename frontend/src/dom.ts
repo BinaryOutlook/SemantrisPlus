@@ -14,6 +14,7 @@ export interface GameElements {
   lastClueValue: HTMLElement;
   tower: HTMLElement;
   towerStage: HTMLElement;
+  dangerZone: HTMLElement;
   effectsLayer: HTMLElement;
   gameOverModal: HTMLElement;
   gameOverTitle: HTMLElement;
@@ -55,6 +56,7 @@ export function resolveGameElements(documentRef: Document = document): GameEleme
     lastClueValue: requireElement("last-clue-value", documentRef),
     tower: requireElement("tower", documentRef),
     towerStage: requireElement("tower-stage", documentRef),
+    dangerZone: requireElement("danger-zone", documentRef),
     effectsLayer: requireElement("effects-layer", documentRef),
     gameOverModal: requireElement("game-over-modal", documentRef),
     gameOverTitle: requireElement("game-over-title", documentRef),

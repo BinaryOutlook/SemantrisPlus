@@ -49,3 +49,27 @@ export function renderBoard(
   });
   elements.tower.replaceChildren(fragment);
 }
+
+function resolveNumericPixels(value: string): number {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+export function syncStageMetrics(
+  elements: Pick<GameElements, "tower" | "towerStage" | "dangerZone">,
+  boardState: BoardState,
+): void {
+  const dangerRows = Math.max(0, boardState.danger_zone_size);
+  const towerStyles = window.getComputedStyle(elements.tower);
+  const chip = elements.tower.querySelector<HTMLElement>(".word-chip");
+  const chipHeight = chip?.getBoundingClientRect().height ?? 0;
+  const rowGap = resolveNumericPixels(towerStyles.rowGap || towerStyles.gap || "0");
+  const paddingBottom = resolveNumericPixels(towerStyles.paddingBottom);
+  const zoneHeight =
+    dangerRows > 0
+      ? paddingBottom + chipHeight * dangerRows + rowGap * Math.max(0, dangerRows - 1)
+      : 0;
+
+  elements.towerStage.style.setProperty("--danger-zone-height", `${zoneHeight}px`);
+  elements.dangerZone.hidden = dangerRows === 0;
+}

@@ -1,6 +1,6 @@
 import { createNewGame, loadGameState, submitClueTurn } from "./api";
 import { animateBoardTransition, explodeWords } from "./animations";
-import { renderBoard } from "./board";
+import { renderBoard, syncStageMetrics } from "./board";
 import type { GameElements } from "./dom";
 import { setBusy, setStatus, updateHud } from "./hud";
 import { createClientState } from "./state";
@@ -18,6 +18,13 @@ const animationTimings = {
 export function initGameController(elements: GameElements): void {
   const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const clientState = createClientState();
+  const syncCurrentStageMetrics = (): void => {
+    if (!clientState.currentState) {
+      return;
+    }
+
+    syncStageMetrics(elements, clientState.currentState);
+  };
 
   async function handleTurn(result: TurnResponse): Promise<void> {
     const currentState = clientState.currentState;
@@ -35,6 +42,7 @@ export function initGameController(elements: GameElements): void {
         { duration: animationTimings.miss },
         prefersReducedMotion,
       );
+      syncStageMetrics(elements, result.state);
       updateHud(elements, clientState, result.state);
       setStatus(elements, messageWithWarning(result), "miss");
       return;
@@ -60,6 +68,7 @@ export function initGameController(elements: GameElements): void {
       },
       prefersReducedMotion,
     );
+    syncStageMetrics(elements, result.state);
     updateHud(elements, clientState, result.state);
     setStatus(elements, messageWithWarning(result), "hit");
   }
@@ -68,6 +77,7 @@ export function initGameController(elements: GameElements): void {
     const payload = await loadGameState();
     updateHud(elements, clientState, payload.state);
     renderBoard(elements, payload.state.board, payload.state);
+    syncStageMetrics(elements, payload.state);
     if (payload.state.game_over) {
       elements.gameOverNewGameButton.focus();
       return;
@@ -85,6 +95,7 @@ export function initGameController(elements: GameElements): void {
       const payload = await createNewGame();
       updateHud(elements, clientState, payload.state);
       renderBoard(elements, payload.state.board, payload.state);
+      syncStageMetrics(elements, payload.state);
       elements.clueInput.value = "";
       setStatus(elements, payload.message, "neutral");
     } catch (error) {
@@ -134,6 +145,13 @@ export function initGameController(elements: GameElements): void {
   elements.gameOverNewGameButton.addEventListener("click", () => {
     void startNewGame();
   });
+  window.addEventListener("resize", syncCurrentStageMetrics);
+
+  if ("fonts" in document) {
+    void document.fonts.ready.then(() => {
+      syncCurrentStageMetrics();
+    });
+  }
 
   void loadState().catch((error) => {
     setStatus(elements, getErrorMessage(error), "error");

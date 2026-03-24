@@ -802,10 +802,13 @@ input {
 
 .danger-zone {
   top: auto;
-  height: calc(
-    var(--tower-row-size) * var(--danger-zone-rows) +
-    var(--tower-gap) * var(--danger-zone-gaps) +
-    var(--tower-stage-padding-y)
+  height: var(
+    --danger-zone-height,
+    calc(
+      var(--tower-row-size) * var(--danger-zone-rows) +
+      var(--tower-gap) * var(--danger-zone-gaps) +
+      var(--tower-stage-padding-y)
+    )
   );
   background:
     linear-gradient(180deg, transparent, var(--clear-zone-wash-mid) 42%, var(--clear-zone-wash-end)),

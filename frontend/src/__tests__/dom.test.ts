@@ -18,6 +18,7 @@ function buildGameDocument(): Document {
     <dd id="last-clue-value"></dd>
     <div id="tower"></div>
     <div id="tower-stage"></div>
+    <div id="danger-zone"></div>
     <div id="effects-layer"></div>
     <div id="game-over-modal"></div>
     <h2 id="game-over-title"></h2>
