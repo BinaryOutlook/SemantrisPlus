@@ -133,6 +133,7 @@ def resolve_turn(
     state: dict[str, Any],
     ranked_indices_most_to_least: Sequence[int],
     vocabulary_size: int,
+    score_gain_multiplier: float = 1.0,
     rng: random.Random | None = None,
 ) -> TurnResolution:
     rng = rng or random
@@ -149,7 +150,8 @@ def resolve_turn(
     if target_rank_index < zone_size:
         removed = ranked_indices[target_rank_index:zone_size]
         survivors_ranked = ranked_indices[:target_rank_index] + ranked_indices[zone_size:]
-        new_score = state["score"] + len(removed)
+        score_gain = max(0, round(len(removed) * score_gain_multiplier))
+        new_score = state["score"] + score_gain
         desired_size = calculate_board_size(new_score)
         spawned = draw_unseen_indices(
             vocabulary_size=vocabulary_size,
@@ -175,6 +177,7 @@ def resolve_turn(
             "turn_count": state["turn_count"] + 1,
             "game_over": not new_board_indices,
             "ended_at_ms": int(time.time() * 1000) if not new_board_indices else None,
+            "game_result": "win" if not new_board_indices else None,
         }
         return TurnResolution(
             state=updated_state,
@@ -191,6 +194,7 @@ def resolve_turn(
         "turn_count": state["turn_count"] + 1,
         "game_over": False,
         "ended_at_ms": None,
+        "game_result": None,
     }
     return TurnResolution(
         state=updated_state,

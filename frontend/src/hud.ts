@@ -70,6 +70,7 @@ function setGameOverModal(
     "body" | "gameOverModal" | "gameOverTitle" | "gameOverMessage"
   >,
   isOpen: boolean,
+  title = "You won.",
   message = "",
 ): void {
   elements.body.classList.toggle("has-game-over-modal", isOpen);
@@ -82,7 +83,7 @@ function setGameOverModal(
     return;
   }
 
-  elements.gameOverTitle.textContent = "You won.";
+  elements.gameOverTitle.textContent = title;
   elements.gameOverMessage.textContent = message;
 }
 
@@ -114,12 +115,18 @@ export function updateHud(
 
   if (state.game_over) {
     setStatus(elements, "You cleared the tower. Start a new game to play again.", "hit");
+    const gameOverTitle = state.game_result === "loss" ? "Run over." : "You won.";
+    const gameOverMessage =
+      state.game_result === "loss"
+        ? `The run ended in ${elements.timer.textContent}. Start a new game to try again.`
+        : `You cleared the tower in ${elements.timer.textContent}. Start a new game to play again.`;
     setGameOverModal(
       elements,
       true,
-      `You cleared the tower in ${elements.timer.textContent}. Start a new game to play again.`,
+      gameOverTitle,
+      gameOverMessage,
     );
-    elements.submitButton.textContent = "Run Complete";
+    elements.submitButton.textContent = state.game_result === "loss" ? "Run Over" : "Run Complete";
     elements.submitButton.disabled = true;
     elements.clueInput.disabled = true;
     return;

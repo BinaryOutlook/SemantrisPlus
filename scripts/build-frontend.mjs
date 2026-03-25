@@ -3,6 +3,8 @@ import { build } from "esbuild";
 await build({
   entryPoints: {
     game: "frontend/src/game.ts",
+    restriction: "frontend/src/restriction.ts",
+    blocks: "frontend/src/blocks.ts",
     theme: "frontend/src/theme.ts",
   },
   outdir: "static/js",

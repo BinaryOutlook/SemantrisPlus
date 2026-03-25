@@ -21,7 +21,7 @@ except Exception:  # pragma: no cover - import safety only
     OpenAI = None
 
 
-SYSTEM_PROMPT = """
+RANKING_SYSTEM_PROMPT = """
 You are the ranking engine for an arcade word association game.
 Rank the provided words from MOST related to LEAST related to the clue.
 
@@ -31,13 +31,58 @@ Rules:
 - Return the ranking result only.
 """.strip()
 
+RESTRICTION_SYSTEM_PROMPT = """
+You judge whether a clue satisfies an active game rule and, only when it does,
+rank the provided words from MOST related to LEAST related to the clue.
+
+Rules:
+- Return JSON only.
+- Preserve the original spelling of each word.
+- If the clue fails the rule, set rule_passed=false and ranked_words=null.
+- If the clue passes the rule, set rule_passed=true and ranked_words to a full
+  permutation of every provided word exactly once.
+- short_reason must be brief and safe to show directly to a player.
+""".strip()
+
+SCORING_SYSTEM_PROMPT = """
+You score how strongly each provided word relates to the clue.
+
+Rules:
+- Return JSON only.
+- Use every input word exactly once.
+- Preserve the original spelling of each word.
+- Each score must be an integer from 0 to 100.
+- Higher scores mean stronger semantic relevance to the clue.
+""".strip()
+
 
 def render_ranking_input(clue: str, words: Sequence[str]) -> str:
     return f"Clue: {clue.strip()}\nWords:\n" + "\n".join(words)
 
 
 def render_ranking_prompt(clue: str, words: Sequence[str]) -> str:
-    return f"{SYSTEM_PROMPT}\n\n{render_ranking_input(clue, words)}"
+    return f"{RANKING_SYSTEM_PROMPT}\n\n{render_ranking_input(clue, words)}"
+
+
+def render_restriction_input(rule_text: str, clue: str, words: Sequence[str]) -> str:
+    return (
+        f"Active rule: {rule_text.strip()}\n"
+        f"Clue: {clue.strip()}\n"
+        "Words:\n"
+        + "\n".join(words)
+    )
+
+
+def render_restriction_prompt(rule_text: str, clue: str, words: Sequence[str]) -> str:
+    return f"{RESTRICTION_SYSTEM_PROMPT}\n\n{render_restriction_input(rule_text, clue, words)}"
+
+
+def render_scoring_input(clue: str, words: Sequence[str]) -> str:
+    return f"Clue: {clue.strip()}\nWords:\n" + "\n".join(words)
+
+
+def render_scoring_prompt(clue: str, words: Sequence[str]) -> str:
+    return f"{SCORING_SYSTEM_PROMPT}\n\n{render_scoring_input(clue, words)}"
 
 
 class RankingError(RuntimeError):
@@ -47,6 +92,32 @@ class RankingError(RuntimeError):
 @dataclass
 class RankingResult:
     ranked_words: list[str]
+    latency_ms: int
+    provider: str
+    used_fallback: bool
+    warning: str | None = None
+
+
+@dataclass
+class RuleJudgeResult:
+    rule_passed: bool
+    short_reason: str
+    ranked_words: list[str] | None
+    latency_ms: int
+    provider: str
+    used_fallback: bool
+    warning: str | None = None
+
+
+@dataclass(frozen=True)
+class WordScore:
+    word: str
+    score: int
+
+
+@dataclass
+class WordScoringResult:
+    scored_words: list[WordScore]
     latency_ms: int
     provider: str
     used_fallback: bool
@@ -70,6 +141,27 @@ class RankedWordsPayload(BaseModel):
     ranked_words: list[str]
 
 
+class RestrictedRankingPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    rule_passed: bool
+    short_reason: str
+    ranked_words: list[str] | None = None
+
+
+class WordScoreItemPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    word: str
+    score: int
+
+
+class WordScoringPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scored_words: list[WordScoreItemPayload]
+
+
 class PrimaryRanker(Protocol):
     provider: str
 
@@ -78,6 +170,17 @@ class PrimaryRanker(Protocol):
         ...
 
     def rank_words(self, clue: str, words: Sequence[str]) -> list[str]:
+        ...
+
+    def judge_restricted_clue(
+        self,
+        rule_text: str,
+        clue: str,
+        words: Sequence[str],
+    ) -> tuple[bool, str, list[str] | None]:
+        ...
+
+    def score_words_against_clue(self, clue: str, words: Sequence[str]) -> list[WordScore]:
         ...
 
 
@@ -118,6 +221,38 @@ def validate_ranked_words(ranked_words: Sequence[str], expected_words: Sequence[
     return [canonical_lookup[word] for word in normalized_ranked]
 
 
+def validate_scored_words(
+    scored_words: Sequence[WordScore],
+    expected_words: Sequence[str],
+) -> list[WordScore]:
+    normalized_expected = [normalize_word(word) for word in expected_words]
+    normalized_scored = [normalize_word(item.word) for item in scored_words]
+
+    if len(normalized_scored) != len(normalized_expected):
+        raise RankingError("Model returned the wrong number of scored words.")
+
+    if len(set(normalized_scored)) != len(normalized_expected):
+        raise RankingError("Model returned duplicate scored words.")
+
+    if set(normalized_scored) != set(normalized_expected):
+        raise RankingError("Model returned unknown or missing scored words.")
+
+    canonical_lookup = {normalize_word(word): word for word in expected_words}
+    validated: list[WordScore] = []
+    for item in scored_words:
+        if not isinstance(item.score, int):
+            raise RankingError("Model returned a non-integer score.")
+        if item.score < 0 or item.score > 100:
+            raise RankingError("Model returned a score outside the 0..100 range.")
+        validated.append(
+            WordScore(
+                word=canonical_lookup[normalize_word(item.word)],
+                score=item.score,
+            )
+        )
+    return validated
+
+
 def _parse_ranked_words_payload(payload: object) -> list[str] | None:
     if payload is None:
         return None
@@ -131,6 +266,47 @@ def _parse_ranked_words_payload(payload: object) -> list[str] | None:
         return None
 
     return [str(item).strip() for item in parsed.ranked_words]
+
+
+def _parse_restricted_ranking_payload(
+    payload: object,
+    expected_words: Sequence[str],
+) -> tuple[bool, str, list[str] | None] | None:
+    if payload is None:
+        return None
+
+    try:
+        parsed = RestrictedRankingPayload.model_validate(payload)
+    except ValidationError:
+        return None
+
+    ranked_words: list[str] | None = None
+    if parsed.rule_passed:
+        if parsed.ranked_words is None:
+            raise RankingError("Model passed the rule without returning a ranking.")
+        ranked_words = validate_ranked_words(parsed.ranked_words, expected_words)
+    elif parsed.ranked_words is not None:
+        raise RankingError("Model returned ranked words for a failed rule.")
+
+    return (parsed.rule_passed, parsed.short_reason.strip(), ranked_words)
+
+
+def _parse_word_scoring_payload(
+    payload: object,
+    expected_words: Sequence[str],
+) -> list[WordScore] | None:
+    if payload is None:
+        return None
+
+    try:
+        parsed = WordScoringPayload.model_validate(payload)
+    except ValidationError:
+        return None
+
+    return validate_scored_words(
+        [WordScore(word=item.word.strip(), score=item.score) for item in parsed.scored_words],
+        expected_words,
+    )
 
 
 def parse_ranked_words(response_text: str, expected_words: Sequence[str]) -> list[str]:
@@ -150,6 +326,39 @@ def parse_ranked_words(response_text: str, expected_words: Sequence[str]) -> lis
         parsed_words = [line.strip() for line in cleaned.splitlines() if line.strip()]
 
     return validate_ranked_words(parsed_words, expected_words)
+
+
+def parse_restricted_ranking(
+    response_text: str,
+    expected_words: Sequence[str],
+) -> tuple[bool, str, list[str] | None]:
+    cleaned = _strip_code_fences(response_text)
+
+    for candidate in filter(None, [cleaned, _extract_json_candidate(cleaned)]):
+        try:
+            parsed = _parse_restricted_ranking_payload(json.loads(candidate), expected_words)
+        except json.JSONDecodeError:
+            parsed = None
+
+        if parsed is not None:
+            return parsed
+
+    raise RankingError("Model returned an invalid restriction judgment payload.")
+
+
+def parse_word_scoring(response_text: str, expected_words: Sequence[str]) -> list[WordScore]:
+    cleaned = _strip_code_fences(response_text)
+
+    for candidate in filter(None, [cleaned, _extract_json_candidate(cleaned)]):
+        try:
+            parsed = _parse_word_scoring_payload(json.loads(candidate), expected_words)
+        except json.JSONDecodeError:
+            parsed = None
+
+        if parsed is not None:
+            return parsed
+
+    raise RankingError("Model returned an invalid word-scoring payload.")
 
 
 def _clean_detail_value(value: Any) -> str | None:
@@ -367,11 +576,23 @@ class GeminiRanker:
 
         self._client = client or genai.Client(api_key=api_key)
         self._model_name = model_name
-        self._generation_config = {
+        self._ranking_generation_config = {
             "temperature": 0.0,
             "max_output_tokens": 512,
             "response_mime_type": "application/json",
             "response_json_schema": RankedWordsPayload.model_json_schema(),
+        }
+        self._restriction_generation_config = {
+            "temperature": 0.0,
+            "max_output_tokens": 512,
+            "response_mime_type": "application/json",
+            "response_json_schema": RestrictedRankingPayload.model_json_schema(),
+        }
+        self._scoring_generation_config = {
+            "temperature": 0.0,
+            "max_output_tokens": 512,
+            "response_mime_type": "application/json",
+            "response_json_schema": WordScoringPayload.model_json_schema(),
         }
 
     @property
@@ -382,7 +603,7 @@ class GeminiRanker:
         response = self._client.models.generate_content(
             model=self._model_name,
             contents=render_ranking_prompt(clue, words),
-            config=self._generation_config,
+            config=self._ranking_generation_config,
         )
         parsed_words = _parse_ranked_words_payload(getattr(response, "parsed", None))
         if parsed_words is not None:
@@ -393,6 +614,43 @@ class GeminiRanker:
             raise RankingError("Model returned an empty response.")
 
         return parse_ranked_words(text, words)
+
+    def judge_restricted_clue(
+        self,
+        rule_text: str,
+        clue: str,
+        words: Sequence[str],
+    ) -> tuple[bool, str, list[str] | None]:
+        response = self._client.models.generate_content(
+            model=self._model_name,
+            contents=render_restriction_prompt(rule_text, clue, words),
+            config=self._restriction_generation_config,
+        )
+        parsed_payload = _parse_restricted_ranking_payload(getattr(response, "parsed", None), words)
+        if parsed_payload is not None:
+            return parsed_payload
+
+        text = getattr(response, "text", "") or ""
+        if not text.strip():
+            raise RankingError("Model returned an empty response.")
+
+        return parse_restricted_ranking(text, words)
+
+    def score_words_against_clue(self, clue: str, words: Sequence[str]) -> list[WordScore]:
+        response = self._client.models.generate_content(
+            model=self._model_name,
+            contents=render_scoring_prompt(clue, words),
+            config=self._scoring_generation_config,
+        )
+        parsed_payload = _parse_word_scoring_payload(getattr(response, "parsed", None), words)
+        if parsed_payload is not None:
+            return parsed_payload
+
+        text = getattr(response, "text", "") or ""
+        if not text.strip():
+            raise RankingError("Model returned an empty response.")
+
+        return parse_word_scoring(text, words)
 
 
 class OpenAICompatibleRanker:
@@ -424,34 +682,72 @@ class OpenAICompatibleRanker:
     def base_url(self) -> str:
         return self._base_url
 
-    def rank_words(self, clue: str, words: Sequence[str]) -> list[str]:
+    def _complete(self, system_prompt: str, user_prompt: str) -> str:
         completion = self._client.chat.completions.create(
             model=self._model_name,
             messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": render_ranking_input(clue, words)},
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
             ],
             **self._request_options,
         )
-        return parse_ranked_words(_extract_openai_response_text(completion), words)
+        return _extract_openai_response_text(completion)
+
+    def rank_words(self, clue: str, words: Sequence[str]) -> list[str]:
+        return parse_ranked_words(
+            self._complete(RANKING_SYSTEM_PROMPT, render_ranking_input(clue, words)),
+            words,
+        )
+
+    def judge_restricted_clue(
+        self,
+        rule_text: str,
+        clue: str,
+        words: Sequence[str],
+    ) -> tuple[bool, str, list[str] | None]:
+        return parse_restricted_ranking(
+            self._complete(
+                RESTRICTION_SYSTEM_PROMPT,
+                render_restriction_input(rule_text, clue, words),
+            ),
+            words,
+        )
+
+    def score_words_against_clue(self, clue: str, words: Sequence[str]) -> list[WordScore]:
+        return parse_word_scoring(
+            self._complete(SCORING_SYSTEM_PROMPT, render_scoring_input(clue, words)),
+            words,
+        )
 
 
 class HeuristicRanker:
     provider = "heuristic-fallback"
 
-    def rank_words(self, clue: str, words: Sequence[str]) -> list[str]:
+    def _score_tuple(self, clue: str, word: str) -> tuple[float, float, str]:
         clue_normalized = normalize_word(clue)
+        word_normalized = normalize_word(word)
         clue_tokens = set(re.findall(r"[a-z0-9]+", clue_normalized))
+        word_tokens = set(re.findall(r"[a-z0-9]+", word_normalized))
+        overlap = len(clue_tokens & word_tokens) * 3.0
+        substring_bonus = 1.5 if clue_normalized in word_normalized or word_normalized in clue_normalized else 0.0
+        similarity = SequenceMatcher(None, clue_normalized, word_normalized).ratio()
+        return (overlap + substring_bonus + similarity, similarity, word_normalized)
 
-        def score_word(word: str) -> tuple[float, float, str]:
-            word_normalized = normalize_word(word)
-            word_tokens = set(re.findall(r"[a-z0-9]+", word_normalized))
-            overlap = len(clue_tokens & word_tokens) * 3.0
-            substring_bonus = 1.5 if clue_normalized in word_normalized or word_normalized in clue_normalized else 0.0
-            similarity = SequenceMatcher(None, clue_normalized, word_normalized).ratio()
-            return (overlap + substring_bonus + similarity, similarity, word_normalized)
+    def rank_words(self, clue: str, words: Sequence[str]) -> list[str]:
+        return sorted(words, key=lambda word: self._score_tuple(clue, word), reverse=True)
 
-        return sorted(words, key=score_word, reverse=True)
+    def score_words_against_clue(self, clue: str, words: Sequence[str]) -> list[WordScore]:
+        ranked_words = self.rank_words(clue, words)
+        if not ranked_words:
+            return []
+        if len(ranked_words) == 1:
+            return [WordScore(word=ranked_words[0], score=100)]
+
+        step = 100 / max(1, len(ranked_words) - 1)
+        return [
+            WordScore(word=word, score=max(0, round(100 - index * step)))
+            for index, word in enumerate(ranked_words)
+        ]
 
 
 class ResilientRanker:
@@ -501,6 +797,111 @@ class ResilientRanker:
         latency_ms = round((time.perf_counter() - start) * 1000)
         return RankingResult(
             ranked_words=fallback_words,
+            latency_ms=latency_ms,
+            provider=self.fallback.provider,
+            used_fallback=True,
+            warning=(
+                self.initial_warning
+                or "Primary provider is not configured, so the local fallback ranker was used."
+            ),
+        )
+
+    def judge_restricted_clue(
+        self,
+        rule_text: str,
+        clue: str,
+        words: Sequence[str],
+    ) -> RuleJudgeResult:
+        start = time.perf_counter()
+
+        if self.primary is not None:
+            try:
+                rule_passed, short_reason, ranked_words = self.primary.judge_restricted_clue(
+                    rule_text,
+                    clue,
+                    words,
+                )
+                latency_ms = round((time.perf_counter() - start) * 1000)
+                return RuleJudgeResult(
+                    rule_passed=rule_passed,
+                    short_reason=short_reason,
+                    ranked_words=ranked_words,
+                    latency_ms=latency_ms,
+                    provider=self.primary.provider,
+                    used_fallback=False,
+                )
+            except Exception as exc:
+                fallback_words = self.fallback.rank_words(clue, words)
+                latency_ms = round((time.perf_counter() - start) * 1000)
+                return RuleJudgeResult(
+                    rule_passed=True,
+                    short_reason="Restriction check unavailable, so this turn used fallback ranking without a bonus.",
+                    ranked_words=fallback_words,
+                    latency_ms=latency_ms,
+                    provider=self.fallback.provider,
+                    used_fallback=True,
+                    warning=(
+                        "Primary restriction judge failed. "
+                        + format_provider_diagnostic(
+                            exc,
+                            provider=getattr(self.primary, "provider", "primary"),
+                            stage="restriction-judge",
+                            context=_provider_context(self.primary),
+                        )
+                    ),
+                )
+
+        fallback_words = self.fallback.rank_words(clue, words)
+        latency_ms = round((time.perf_counter() - start) * 1000)
+        return RuleJudgeResult(
+            rule_passed=True,
+            short_reason="Restriction check unavailable, so this turn used fallback ranking without a bonus.",
+            ranked_words=fallback_words,
+            latency_ms=latency_ms,
+            provider=self.fallback.provider,
+            used_fallback=True,
+            warning=(
+                self.initial_warning
+                or "Primary provider is not configured, so the local fallback ranker was used."
+            ),
+        )
+
+    def score_words_against_clue(self, clue: str, words: Sequence[str]) -> WordScoringResult:
+        start = time.perf_counter()
+
+        if self.primary is not None:
+            try:
+                scored_words = self.primary.score_words_against_clue(clue, words)
+                latency_ms = round((time.perf_counter() - start) * 1000)
+                return WordScoringResult(
+                    scored_words=scored_words,
+                    latency_ms=latency_ms,
+                    provider=self.primary.provider,
+                    used_fallback=False,
+                )
+            except Exception as exc:
+                fallback_scores = self.fallback.score_words_against_clue(clue, words)
+                latency_ms = round((time.perf_counter() - start) * 1000)
+                return WordScoringResult(
+                    scored_words=fallback_scores,
+                    latency_ms=latency_ms,
+                    provider=self.fallback.provider,
+                    used_fallback=True,
+                    warning=(
+                        "Primary scoring provider failed. "
+                        + format_provider_diagnostic(
+                            exc,
+                            provider=getattr(self.primary, "provider", "primary"),
+                            stage="word-scoring",
+                            context=_provider_context(self.primary),
+                        )
+                    ),
+                )
+
+        fallback_scores = self.fallback.score_words_against_clue(clue, words)
+        latency_ms = round((time.perf_counter() - start) * 1000)
+        return WordScoringResult(
+            scored_words=fallback_scores,
             latency_ms=latency_ms,
             provider=self.fallback.provider,
             used_fallback=True,

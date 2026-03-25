@@ -65,10 +65,10 @@
     <section class="landing-hero">
       <div class="landing-copy">
         <p class="eyebrow">Quick replayable puzzle</p>
-        <h1 class="landing-logo">One clue. One stack. Instant semantic motion.</h1>
+        <h1 class="landing-logo">One clue. Three modes. Instant semantic motion.</h1>
         <p class="landing-tag">
-          Semantris Plus turns each clue into a fast browser puzzle: pull the
-          target downward, clear the zone, and rerun the moment the round ends.
+          Semantris Plus now supports three playable semantic loops: classic
+          tower iteration, rule-restricted runs, and a chain-reaction grid mode.
         </p>
 
         <div class="landing-chip-row" aria-label="Game highlights">
@@ -145,12 +145,100 @@
       </div>
     </section>
 
+    <section class="mode-gallery" aria-label="Playable modes">
+      <section class="mode-card">
+        <div class="mode-card__header">
+          <p class="eyebrow">Mode</p>
+          <h2>Restriction Mode</h2>
+        </div>
+        <div class="mode-card__body">
+          <p class="deck">
+            Every turn must satisfy an active rule before the tower is allowed to move.
+          </p>
+          <ul class="mode-card__points">
+            <li class="mode-card__point">Rotating clue restrictions</li>
+            <li class="mode-card__point">Strike pressure and penalty words</li>
+            <li class="mode-card__point">Bonus scoring for legal clues</li>
+          </ul>
+          <form class="pack-form" method="post" action="{{ url_for('start_restriction_mode') }}">
+            <label class="eyebrow pack-form__label" for="vocabulary-pack-select-restriction">
+              Vocabulary pack
+            </label>
+            <select
+              id="vocabulary-pack-select-restriction"
+              class="pack-select"
+              name="vocabulary_pack_id"
+              aria-label="Vocabulary pack for restriction mode"
+            >
+              {% for pack in vocabulary_packs %}
+                <option
+                  value="{{ pack.id }}"
+                  {% if pack.id == selected_pack_id %}selected{% endif %}
+                >
+                  {{ pack.display_name }} ({{ pack.word_count }})
+                </option>
+              {% endfor %}
+            </select>
+
+            <div class="mode-card__actions">
+              <button class="command-button" type="submit">Start a run</button>
+              <a class="ghost-link" href="{{ url_for('restriction_mode') }}">See the board</a>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <section class="mode-card">
+        <div class="mode-card__header">
+          <p class="eyebrow">Mode</p>
+          <h2>Blocks Mode</h2>
+        </div>
+        <div class="mode-card__body">
+          <p class="deck">
+            Pick one semantic anchor, score its local cluster, and let gravity reshape the grid.
+          </p>
+          <ul class="mode-card__points">
+            <li class="mode-card__point">8x10 semantic grid</li>
+            <li class="mode-card__point">Primary hit plus local chain scoring</li>
+            <li class="mode-card__point">Gravity and refill after every clear</li>
+          </ul>
+          <form class="pack-form" method="post" action="{{ url_for('start_blocks_mode') }}">
+            <label class="eyebrow pack-form__label" for="vocabulary-pack-select-blocks">
+              Vocabulary pack
+            </label>
+            <select
+              id="vocabulary-pack-select-blocks"
+              class="pack-select"
+              name="vocabulary_pack_id"
+              aria-label="Vocabulary pack for blocks mode"
+            >
+              {% for pack in vocabulary_packs %}
+                <option
+                  value="{{ pack.id }}"
+                  {% if pack.id == selected_pack_id %}selected{% endif %}
+                >
+                  {{ pack.display_name }} ({{ pack.word_count }})
+                </option>
+              {% endfor %}
+            </select>
+
+            <div class="mode-card__actions">
+              <button class="command-button" type="submit">Start a run</button>
+              <a class="ghost-link" href="{{ url_for('blocks_mode') }}">See the board</a>
+            </div>
+          </form>
+        </div>
+      </section>
+    </section>
+
     <footer class="landing-footer">
       <div class="landing-footer__note">
         Built for quick clue entry, readable motion, and immediate reruns.
       </div>
       <div class="landing-footer__stats">
         <span class="landing-stat">Iteration Mode</span>
+        <span class="landing-stat">Restriction Mode</span>
+        <span class="landing-stat">Blocks Mode</span>
         <span class="landing-stat">Play in browser</span>
         <span class="landing-stat">Fallback safe</span>
       </div>

@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Semantris Plus | Restriction Mode</title>
+  <script>
+    (function () {
+      var storedTheme = null;
+
+      try {
+        storedTheme = window.localStorage.getItem("semantris-theme");
+      } catch (error) {
+        storedTheme = null;
+      }
+
+      var theme = storedTheme === "light" || storedTheme === "dark"
+        ? storedTheme
+        : (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+
+      document.documentElement.dataset.theme = theme;
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet"
+  />
+  <link
+    rel="stylesheet"
+    href="{{ url_for('static', filename='css/app.css') }}"
+  />
+</head>
+<body class="page page--game page--restriction">
+  <main class="game-shell">
+    <header class="game-topbar">
+      <div class="topbar-leading">
+        <a class="ghost-link ghost-link--compact" href="{{ url_for('index') }}">Back</a>
+        <div class="brand-stack">
+          <span class="brand-mark">Semantris Plus</span>
+          <div class="brand-inline">
+            <span class="mode-chip">Restriction Mode</span>
+            <span class="micro-copy">Rule-bound semantic run</span>
+          </div>
+        </div>
+      </div>
+
+      <section class="hud-strip" aria-label="Primary game metrics">
+        <article class="hero-metric">
+          <span class="hero-metric__label">Score</span>
+          <strong id="score-value" class="hero-metric__value">0</strong>
+        </article>
+        <article class="hero-metric">
+          <span class="hero-metric__label">Elapsed</span>
+          <strong id="timer-value" class="hero-metric__value hero-metric__value--mono">00:00</strong>
+        </article>
+      </section>
+
+      <div class="topbar-actions">
+        <div class="theme-toggle" role="group" aria-label="Color theme">
+          <button
+            type="button"
+            class="theme-toggle__button"
+            data-theme-option="light"
+            aria-pressed="false"
+          >
+            Light
+          </button>
+          <button
+            type="button"
+            class="theme-toggle__button"
+            data-theme-option="dark"
+            aria-pressed="false"
+          >
+            Dark
+          </button>
+        </div>
+        <button id="new-game-button" class="command-button command-button--compact" type="button">
+          New game
+        </button>
+      </div>
+    </header>
+
+    <section class="game-grid">
+      <section class="stage-panel">
+        <div class="stage-topline">
+          <div class="stage-copy">
+            <span class="eyebrow">Current target</span>
+            <div class="stage-target" aria-live="polite">
+              <div id="target-value" class="target-word">...</div>
+            </div>
+          </div>
+        </div>
+
+        <div id="tower-stage" class="tower-stage">
+          <div class="tower-stage__grid" aria-hidden="true"></div>
+          <div id="danger-zone" class="danger-zone" aria-hidden="true">
+            <span class="danger-zone__label">Clear zone</span>
+          </div>
+          <div id="effects-layer" class="effects-layer" aria-hidden="true"></div>
+          <div id="tower" class="tower" aria-live="polite"></div>
+        </div>
+      </section>
+
+      <aside class="side-panel side-panel--right">
+        <section class="panel-card command-card">
+          <div class="panel-card__header">
+            <div>
+              <span class="eyebrow">Clue</span>
+              <h2 class="panel-title">Beat the rule before you beat the tower.</h2>
+            </div>
+            <span class="micro-copy">Failing costs space.</span>
+          </div>
+
+          <form id="clue-form" class="clue-form">
+            <label class="sr-only" for="clue-input">Clue</label>
+            <input
+              id="clue-input"
+              class="clue-input"
+              type="text"
+              autocomplete="off"
+              maxlength="120"
+              placeholder="Type a clue"
+            />
+            <button id="submit-button" class="command-button" type="submit">
+              Send Clue
+            </button>
+          </form>
+
+          <div id="status-banner" class="status-banner" aria-live="polite"></div>
+        </section>
+
+        <section class="panel-card provider-stack">
+          <div class="panel-card__header">
+            <div>
+              <span class="eyebrow">Ranking</span>
+              <h2 class="panel-title panel-title--small">Current model</h2>
+            </div>
+          </div>
+          <div class="provider-stack__badges">
+            <span id="provider-badge" class="status-pill status-pill--provider">Loading</span>
+            <span id="latency-value" class="status-pill">-- ms</span>
+          </div>
+        </section>
+      </aside>
+
+      <aside class="side-panel side-panel--left">
+        <section class="panel-card restriction-rule-card">
+          <div class="panel-card__header">
+            <div>
+              <span class="eyebrow">Active rule</span>
+              <h2 id="active-rule-name" class="panel-title panel-title--small">Loading rule...</h2>
+            </div>
+            <span id="rule-result-value" class="status-pill">Awaiting clue</span>
+          </div>
+          <p id="active-rule-description" class="deck"></p>
+          <div class="restriction-strikes">
+            <div class="run-stat__head">
+              <span class="micro-copy">Strikes</span>
+              <span id="strike-value" class="micro-copy">0 / 3</span>
+            </div>
+            <div id="strike-meter" class="restriction-strike-meter" aria-label="Strike meter"></div>
+          </div>
+        </section>
+
+        <section class="panel-card progress-card" aria-label="Vocabulary progress">
+          <div class="panel-card__header">
+            <div>
+              <span class="eyebrow">Run</span>
+              <h2 class="panel-title panel-title--small">Current state</h2>
+            </div>
+          </div>
+
+          <div class="run-stat">
+            <div class="run-stat__head">
+              <span class="micro-copy">Progress</span>
+              <span id="progress-value" class="micro-copy">0 / 0 seen</span>
+            </div>
+            <div class="progress-track">
+              <div id="progress-bar" class="progress-bar"></div>
+            </div>
+          </div>
+
+          <dl class="meta-list meta-list--grid">
+            <div>
+              <dt>Turns</dt>
+              <dd id="turns-value">0</dd>
+            </div>
+            <div>
+              <dt>Remaining</dt>
+              <dd id="remaining-value">0</dd>
+            </div>
+            <div>
+              <dt>Vocabulary</dt>
+              <dd id="vocab-value">...</dd>
+            </div>
+            <div>
+              <dt>Last clue</dt>
+              <dd id="last-clue-value">None yet</dd>
+            </div>
+          </dl>
+        </section>
+      </aside>
+    </section>
+  </main>
+
+  <div id="game-over-modal" class="game-over-modal" role="dialog" aria-modal="true" aria-hidden="true" hidden>
+    <section class="game-over-card" aria-labelledby="game-over-title">
+      <p class="eyebrow">Run Complete</p>
+      <h2 id="game-over-title" class="game-over-card__title">You won.</h2>
+      <p id="game-over-message" class="deck game-over-card__message"></p>
+      <button id="game-over-new-game-button" class="command-button" type="button">
+        New Game
+      </button>
+    </section>
+  </div>
+
+  <script
+    defer
+    src="{{ url_for('static', filename='js/theme.bundle.js') }}"
+  ></script>
+  <script
+    defer
+    src="{{ url_for('static', filename='js/restriction.bundle.js') }}"
+  ></script>
+</body>
+</html>

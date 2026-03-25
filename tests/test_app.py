@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch
 
 import app as app_module
-from llm_client import RankingResult
+from llm_client import RankingResult, RuleJudgeResult, WordScore, WordScoringResult
 
 
 class DummyRanker:
@@ -14,6 +14,31 @@ class DummyRanker:
             provider="dummy-ranker",
             used_fallback=True,
             warning="Test ranker used.",
+        )
+
+    def judge_restricted_clue(self, rule_text, clue, words):
+        ranked = sorted(words, key=lambda word: (word.casefold() != clue.casefold(), word.casefold()))
+        return RuleJudgeResult(
+            rule_passed=True,
+            short_reason="Rule accepted for test.",
+            ranked_words=ranked,
+            latency_ms=15,
+            provider="dummy-ranker",
+            used_fallback=False,
+            warning=None,
+        )
+
+    def score_words_against_clue(self, clue, words):
+        scored_words = [
+            WordScore(word=word, score=max(0, 100 - index * 20))
+            for index, word in enumerate(words)
+        ]
+        return WordScoringResult(
+            scored_words=scored_words,
+            latency_ms=18,
+            provider="dummy-ranker",
+            used_fallback=False,
+            warning=None,
         )
 
 
@@ -28,6 +53,8 @@ class AppRouteTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Iteration Mode", response.data)
+        self.assertIn(b"Restriction Mode", response.data)
+        self.assertIn(b"Blocks Mode", response.data)
         self.assertIn(b'name="vocabulary_pack_id"', response.data)
         self.assertIn(default_pack.display_name.encode("utf-8"), response.data)
         self.assertIn(f"({default_pack.word_count})".encode("utf-8"), response.data)
@@ -37,6 +64,20 @@ class AppRouteTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Send Clue", response.data)
+
+    def test_restriction_mode_page_loads(self) -> None:
+        response = self.client.get("/restriction-mode")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Restriction Mode", response.data)
+        self.assertIn(b"strike-meter", response.data)
+
+    def test_blocks_mode_page_loads(self) -> None:
+        response = self.client.get("/blocks-mode")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Blocks Mode", response.data)
+        self.assertIn(b"blocks-grid", response.data)
 
     def test_start_iteration_mode_selects_requested_pack(self) -> None:
         pack = app_module.VOCABULARY_CATALOG["super_light_test"]
@@ -102,6 +143,36 @@ class AppRouteTests(unittest.TestCase):
                 self.assertIn("state", payload)
                 self.assertIn("ranked_board", payload)
                 self.assertIn("new_board", payload)
+
+    def test_restriction_turn_rejects_local_rule_and_adds_a_strike(self) -> None:
+        with self.client as client:
+            client.get("/api/restriction/state")
+            with client.session_transaction() as session_state:
+                session_state["active_rule_id"] = "taboo_initials_str"
+
+            response = client.post("/api/restriction/turn", json={"clue": "storm port"})
+            payload = response.get_json()
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(payload["resolution"], "rule_fail")
+            self.assertEqual(payload["state"]["strike_count"], 1)
+            self.assertEqual(len(payload["penalty_words"]), 1)
+            self.assertFalse(payload["rule_passed"])
+
+    def test_blocks_turn_returns_chain_payload(self) -> None:
+        with patch.object(app_module, "RANKER", DummyRanker()):
+            with self.client as client:
+                state_payload = client.get("/api/blocks/state").get_json()["state"]
+                first_word = next(cell["word"] for cell in state_payload["cells"] if cell["word"])
+
+                response = client.post("/api/blocks/turn", json={"clue": first_word})
+                payload = response.get_json()
+
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(payload["resolution"], "chain")
+                self.assertIn("primary_word", payload)
+                self.assertGreaterEqual(payload["state"]["last_chain_size"], 1)
+                self.assertIn("state", payload)
 
 
 if __name__ == "__main__":

@@ -1,4 +1,5 @@
 export interface GameState {
+  mode_id: string;
   score: number;
   board: string[];
   target_word: string | null;
@@ -11,6 +12,7 @@ export interface GameState {
   last_warning: string | null;
   last_clue: string | null;
   game_over: boolean;
+  game_result: string | null;
   vocabulary_name: string;
   board_goal_size: number;
   danger_zone_size: number;
@@ -51,6 +53,7 @@ export interface BoardTransitionOptions {
   duration?: number;
   spawnDuration?: number;
   spawnedWords?: string[];
+  spawnFrom?: "top" | "bottom";
 }
 
 export type StatusTone = "neutral" | "hit" | "miss" | "error";

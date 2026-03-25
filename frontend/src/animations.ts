@@ -17,6 +17,7 @@ export async function animateBoardTransition(
   const duration = options.duration ?? 500;
   const spawnDuration = options.spawnDuration ?? duration;
   const spawnedWords = new Set(options.spawnedWords ?? []);
+  const spawnFrom = options.spawnFrom ?? "top";
   const existingRects = new Map<string, { element: HTMLElement; rect: DOMRect }>();
 
   elements.tower.querySelectorAll<HTMLElement>(".word-chip").forEach((element) => {
@@ -71,11 +72,12 @@ export async function animateBoardTransition(
         );
       }
     } else if (spawnedWords.has(word)) {
+      const startTranslate = spawnFrom === "bottom" ? "translateY(120px) scale(0.94)" : "translateY(-120px) scale(0.94)";
       animations.push(
         element
           .animate(
             [
-              { transform: "translateY(-120px) scale(0.94)", opacity: 0 },
+              { transform: startTranslate, opacity: 0 },
               { transform: "translateY(0) scale(1)", opacity: 1 },
             ],
             {

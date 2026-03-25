@@ -141,6 +141,7 @@
     const duration = options.duration ?? 500;
     const spawnDuration = options.spawnDuration ?? duration;
     const spawnedWords = new Set(options.spawnedWords ?? []);
+    const spawnFrom = options.spawnFrom ?? "top";
     const existingRects = /* @__PURE__ */ new Map();
     elements2.tower.querySelectorAll(".word-chip").forEach((element) => {
       const word = element.dataset.word;
@@ -186,10 +187,11 @@
           );
         }
       } else if (spawnedWords.has(word)) {
+        const startTranslate = spawnFrom === "bottom" ? "translateY(120px) scale(0.94)" : "translateY(-120px) scale(0.94)";
         animations.push(
           element.animate(
             [
-              { transform: "translateY(-120px) scale(0.94)", opacity: 0 },
+              { transform: startTranslate, opacity: 0 },
               { transform: "translateY(0) scale(1)", opacity: 1 }
             ],
             {
@@ -283,7 +285,7 @@
     }
     elements2.timer.textContent = formatElapsed(startedAtMs, endedAtMs ?? Date.now());
   }
-  function setGameOverModal(elements2, isOpen, message = "") {
+  function setGameOverModal(elements2, isOpen, title = "You won.", message = "") {
     elements2.body.classList.toggle("has-game-over-modal", isOpen);
     elements2.gameOverModal.hidden = !isOpen;
     elements2.gameOverModal.setAttribute("aria-hidden", String(!isOpen));
@@ -292,7 +294,7 @@
       elements2.gameOverMessage.textContent = "";
       return;
     }
-    elements2.gameOverTitle.textContent = "You won.";
+    elements2.gameOverTitle.textContent = title;
     elements2.gameOverMessage.textContent = message;
   }
   function updateHud(elements2, clientState, state) {
@@ -316,12 +318,15 @@
     setBusy(elements2, clientState, false);
     if (state.game_over) {
       setStatus(elements2, "You cleared the tower. Start a new game to play again.", "hit");
+      const gameOverTitle = state.game_result === "loss" ? "Run over." : "You won.";
+      const gameOverMessage = state.game_result === "loss" ? `The run ended in ${elements2.timer.textContent}. Start a new game to try again.` : `You cleared the tower in ${elements2.timer.textContent}. Start a new game to play again.`;
       setGameOverModal(
         elements2,
         true,
-        `You cleared the tower in ${elements2.timer.textContent}. Start a new game to play again.`
+        gameOverTitle,
+        gameOverMessage
       );
-      elements2.submitButton.textContent = "Run Complete";
+      elements2.submitButton.textContent = state.game_result === "loss" ? "Run Over" : "Run Complete";
       elements2.submitButton.disabled = true;
       elements2.clueInput.disabled = true;
       return;

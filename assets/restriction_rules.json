@@ -1,0 +1,26 @@
+[
+  {
+    "id": "taboo_initials_str",
+    "display_name": "Taboo Initials",
+    "description": "Do not use clue words starting with S, T, or R.",
+    "kind": "forbidden_initials",
+    "params": {
+      "letters": ["s", "t", "r"]
+    },
+    "bonus_multiplier": 2.0,
+    "penalty_bottom_inserts": 1,
+    "local_validator": true
+  },
+  {
+    "id": "pop_culture_only",
+    "display_name": "Pop Culture Only",
+    "description": "The clue must be a real celebrity or fictional character.",
+    "kind": "semantic_entity_class",
+    "params": {
+      "allowed_classes": ["celebrity", "fictional_character"]
+    },
+    "bonus_multiplier": 2.5,
+    "penalty_bottom_inserts": 1,
+    "local_validator": false
+  }
+]

@@ -11,6 +11,8 @@ from llm_client import (
     build_ranker_from_env,
     format_startup_probe_message,
     parse_ranked_words,
+    parse_restricted_ranking,
+    parse_word_scoring,
     run_startup_probe,
 )
 
@@ -95,6 +97,12 @@ class ExplodingPrimary:
     def rank_words(self, clue, words):
         raise RankingError("provider exploded")
 
+    def judge_restricted_clue(self, rule_text, clue, words):
+        raise RankingError("provider exploded")
+
+    def score_words_against_clue(self, clue, words):
+        raise RankingError("provider exploded")
+
 
 class StatusFailingPrimary:
     provider = "openai"
@@ -113,6 +121,12 @@ class StatusFailingPrimary:
                 }
             },
         )
+
+    def judge_restricted_clue(self, rule_text, clue, words):
+        return self.rank_words(clue, words)
+
+    def score_words_against_clue(self, clue, words):
+        return self.rank_words(clue, words)
 
 
 class LLMClientTests(unittest.TestCase):
@@ -133,6 +147,30 @@ class LLMClientTests(unittest.TestCase):
                 '{"ranked_words": ["Anchor", "Anchor", "Orbit"]}',
                 words,
             )
+
+    def test_parse_restricted_ranking_accepts_valid_json(self) -> None:
+        words = ["Anchor", "Harbor", "Orbit"]
+
+        rule_passed, short_reason, ranked_words = parse_restricted_ranking(
+            '{"rule_passed": true, "short_reason": "Rule satisfied.", "ranked_words": ["Anchor", "Orbit", "Harbor"]}',
+            words,
+        )
+
+        self.assertTrue(rule_passed)
+        self.assertEqual(short_reason, "Rule satisfied.")
+        self.assertEqual(ranked_words, ["Anchor", "Orbit", "Harbor"])
+
+    def test_parse_word_scoring_accepts_valid_json(self) -> None:
+        words = ["Anchor", "Harbor", "Orbit"]
+
+        scored_words = parse_word_scoring(
+            '{"scored_words": [{"word": "Anchor", "score": 100}, {"word": "Harbor", "score": 60}, {"word": "Orbit", "score": 20}]}',
+            words,
+        )
+
+        self.assertEqual(scored_words[0].word, "Anchor")
+        self.assertEqual(scored_words[0].score, 100)
+        self.assertEqual(len(scored_words), 3)
 
     def test_gemini_ranker_uses_structured_output_config(self) -> None:
         response = FakeGeminiResponse(
@@ -203,6 +241,25 @@ class LLMClientTests(unittest.TestCase):
         self.assertTrue(result.used_fallback)
         self.assertEqual(result.provider, "heuristic-fallback")
         self.assertIn("provider exploded", result.warning)
+
+    def test_resilient_ranker_restriction_judge_falls_back_to_bonusless_pass(self) -> None:
+        ranker = ResilientRanker(primary=ExplodingPrimary())
+
+        result = ranker.judge_restricted_clue("Use a celebrity name.", "boat", ["Anchor", "Harbor", "Orbit"])
+
+        self.assertTrue(result.rule_passed)
+        self.assertTrue(result.used_fallback)
+        self.assertIsNotNone(result.ranked_words)
+        self.assertIn("provider exploded", result.warning)
+
+    def test_resilient_ranker_scoring_falls_back_when_primary_fails(self) -> None:
+        ranker = ResilientRanker(primary=ExplodingPrimary())
+
+        result = ranker.score_words_against_clue("boat", ["Anchor", "Harbor", "Orbit"])
+
+        self.assertTrue(result.used_fallback)
+        self.assertEqual(result.provider, "heuristic-fallback")
+        self.assertEqual(len(result.scored_words), 3)
 
     def test_build_ranker_from_env_warns_when_gemini_api_key_is_missing(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
