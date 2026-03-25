@@ -24,9 +24,13 @@ The ambition for this repo is straightforward:
 
 This is intentionally both a game project and a software-structure project.
 
-## Current Mode
+## Current Modes
 
-The current playable mode is `Iteration Mode`, a tower-based arcade variant:
+The game now ships with three playable modes:
+
+### Iteration Mode
+
+The original tower-based arcade variant:
 
 - the game starts with a tower of words and one highlighted target word
 - the player enters a clue
@@ -37,6 +41,72 @@ The current playable mode is `Iteration Mode`, a tower-based arcade variant:
 - score increases by the number of removed words
 - new words drop in from the top
 - the session tracks time, score, turns, and vocabulary progress
+
+### Restriction Mode
+
+A harder tower variant where every clue must also obey a rotating rule:
+
+- the tower and target behave like Iteration Mode
+- an active rule is shown above the board
+- your clue must both satisfy the rule and still semantically pull the target into the destruction zone
+- if the clue passes the rule, the tower resolves like Iteration Mode
+- if the clue fails the rule, you take a strike and penalty words are inserted at the bottom of the tower
+- the run ends if you reach 3 strikes or a penalty insertion pushes the target out of the tower
+- the active rule rotates every 10 turns
+- some successful rule-compliant turns award a score multiplier bonus
+
+### Blocks Mode
+
+A separate grid-based chain reaction mode:
+
+- the board is an `8 x 10` grid with up to `32` occupied cells at a time
+- you type a clue and the system picks the single best matching word as the primary hit
+- nearby words are scored for how strongly they relate to the clue
+- any orthogonally connected neighbor scoring `75` or higher can join the chain
+- the chain keeps expanding outward through qualifying neighbors
+- all chained words are removed together
+- score grows by combo size using an accelerating formula, starting at `10` points for a one-word clear
+- words above fall downward, and new words refill empty slots from the top while unseen vocabulary remains
+- the run ends in a win when the unseen pool is exhausted and the board has been fully cleared
+
+## How To Play
+
+### Starting a run
+
+1. Run the app locally.
+2. Open the landing page.
+3. Choose a vocabulary pack.
+4. Launch `Iteration Mode`, `Restriction Mode`, or `Blocks Mode`.
+
+### Playing Restriction Mode
+
+1. Read the active rule before typing.
+2. Enter a clue that obeys the rule and points toward the highlighted target word.
+3. Submit the clue.
+4. If the clue passes, the ranked tower resolves like normal tower play.
+5. If the clue fails, you take a strike and extra penalty words are added to the bottom.
+6. Survive the rotating rules and clear the tower before hitting 3 strikes.
+
+Tips:
+
+- Shorter clues are often easier to keep rule-compliant.
+- Local-format rules are exact, so wording details matter.
+- A safe clue that misses is usually better than an illegal clue that adds a strike.
+
+### Playing Blocks Mode
+
+1. Look for a small cluster of words that could all plausibly answer the same clue.
+2. Enter one clue for that cluster.
+3. The system chooses a primary word first.
+4. The chain then spreads through adjacent words that also match strongly enough.
+5. Cleared words disappear together, gravity pulls columns downward, and new words spawn in.
+6. Repeat until the unseen pool is empty and the board is cleared.
+
+Tips:
+
+- Think in connected neighborhoods, not isolated words.
+- A clue that strongly matches one word but weakly matches its neighbors usually produces only a short clear.
+- Broad category clues can be useful, but the best clears usually come from tight local themes.
 
 ## Why LLMs Here
 
@@ -54,6 +124,7 @@ What is already in place:
 
 - modularized gameplay logic instead of one monolithic server file
 - explicit JSON API for session state and turns
+- three playable game modes with shared pack selection
 - no-repeat word handling until the unseen pool is exhausted
 - improved tower presentation and animation sequencing
 - a TypeScript frontend source tree compiled into a browser bundle
@@ -100,7 +171,9 @@ This repository is now structured around clear responsibilities instead of mixin
 ```text
 SemantrisPlus/
 ├── app.py                 # Flask app, route wiring, session serialization
-├── game_logic.py          # Pure board/session rules
+├── game_logic.py          # Iteration-mode board/session rules
+├── game_logic_restriction.py # Restriction-mode rules, strikes, and rule rotation
+├── game_logic_blocks.py   # Blocks-mode grid, gravity, and chain resolution
 ├── llm_client.py          # Provider integration, validation, and fallback ranking
 ├── brief.md               # Contractor-facing project brief and roadmap
 ├── GeminiMoving.md        # Migration evaluation and decision record
@@ -111,12 +184,15 @@ SemantrisPlus/
 │   ├── aviation_1.txt
 │   ├── basic_vocab.txt
 │   ├── general_1.txt
-│   └── lite_1.txt
+│   ├── lite_1.txt
+│   └── restriction_rules.json
 ├── docs/
 │   ├── V0.1.md            # Structural cleanup release note
-│   └── V0.2.md            # Frontend TypeScript migration note
+│   ├── V0.2.md            # Frontend TypeScript migration note
+│   ├── 2newmodes.md       # Mode design notes
+│   └── 2newmodes_technical.md # Implementation brief for the new modes
 ├── frontend/
-│   └── src/               # TypeScript source for the interactive game client
+│   └── src/               # TypeScript source for all interactive game clients
 ├── package.json           # Frontend scripts and dependencies
 ├── tsconfig.json          # TypeScript compiler configuration
 ├── vitest.config.ts       # Frontend test configuration
@@ -126,13 +202,17 @@ SemantrisPlus/
 │   ├── css/app.css        # Visual system and layout styling
 │   └── js/                # Compiled browser bundles served by Flask
 ├── templates/
-│   ├── arcade.html        # HTML shell for the game
+│   ├── arcade.html        # HTML shell for Iteration Mode
+│   ├── restriction.html   # HTML shell for Restriction Mode
+│   ├── blocks.html        # HTML shell for Blocks Mode
 │   └── home.html          # HTML shell for the landing page
 ├── testing/
 │   └── api_latency.py     # Optional provider latency experiment
 └── tests/
     ├── test_app.py        # API contract tests
     ├── test_game_logic.py # Gameplay rule tests
+    ├── test_game_logic_restriction.py # Restriction-mode rule tests
+    ├── test_game_logic_blocks.py # Blocks-mode grid and chain tests
     └── test_llm_client.py # Provider selection and fallback tests
 ```
 
