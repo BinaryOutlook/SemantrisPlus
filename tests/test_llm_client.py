@@ -6,6 +6,7 @@ import llm_client as llm_module
 from llm_client import (
     BlocksCandidate,
     GeminiRanker,
+    HeuristicRanker,
     OpenAICompatibleRanker,
     RankingError,
     ResilientRanker,
@@ -352,6 +353,21 @@ class LLMClientTests(unittest.TestCase):
         self.assertTrue(result.used_fallback)
         self.assertEqual(len(result.scored_candidates), 2)
         self.assertIn("blocks-scoring", result.warning)
+
+    def test_heuristic_blocks_scoring_uses_absolute_scores_for_single_candidates(self) -> None:
+        ranker = HeuristicRanker()
+
+        unrelated_score = ranker.score_blocks_candidates(
+            "peak",
+            [BlocksCandidate(candidate_id=2, word="panel")],
+        )[0].score
+        exact_score = ranker.score_blocks_candidates(
+            "peak",
+            [BlocksCandidate(candidate_id=7, word="peak")],
+        )[0].score
+
+        self.assertLess(unrelated_score, 75)
+        self.assertEqual(exact_score, 100)
 
     def test_build_ranker_from_env_warns_when_gemini_api_key_is_missing(self) -> None:
         with patch.dict(os.environ, {}, clear=True):

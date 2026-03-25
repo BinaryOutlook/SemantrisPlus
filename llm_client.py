@@ -1209,6 +1209,22 @@ class HeuristicRanker:
         similarity = SequenceMatcher(None, clue_normalized, word_normalized).ratio()
         return (overlap + substring_bonus + similarity, similarity, word_normalized)
 
+    def _absolute_blocks_score(self, clue: str, word: str) -> int:
+        clue_normalized = normalize_word(clue)
+        word_normalized = normalize_word(word)
+        if not clue_normalized or not word_normalized:
+            return 0
+        if clue_normalized == word_normalized:
+            return 100
+
+        clue_tokens = set(re.findall(r"[a-z0-9]+", clue_normalized))
+        word_tokens = set(re.findall(r"[a-z0-9]+", word_normalized))
+        shared_tokens = len(clue_tokens & word_tokens)
+        token_overlap_score = min(45, shared_tokens * 20)
+        substring_score = 25 if clue_normalized in word_normalized or word_normalized in clue_normalized else 0
+        similarity_score = round(45 * SequenceMatcher(None, clue_normalized, word_normalized).ratio())
+        return max(0, min(100, token_overlap_score + substring_score + similarity_score))
+
     def rank_words(self, clue: str, words: Sequence[str]) -> list[str]:
         return sorted(words, key=lambda word: self._score_tuple(clue, word), reverse=True)
 
@@ -1244,23 +1260,12 @@ class HeuristicRanker:
         clue: str,
         candidates: Sequence[BlocksCandidate],
     ) -> list[BlocksCandidateScore]:
-        ranked_candidates = sorted(
-            candidates,
-            key=lambda candidate: self._score_tuple(clue, candidate.word),
-            reverse=True,
-        )
-        if not ranked_candidates:
-            return []
-        if len(ranked_candidates) == 1:
-            return [BlocksCandidateScore(candidate_id=ranked_candidates[0].candidate_id, score=100)]
-
-        step = 100 / max(1, len(ranked_candidates) - 1)
         return [
             BlocksCandidateScore(
                 candidate_id=candidate.candidate_id,
-                score=max(0, round(100 - index * step)),
+                score=self._absolute_blocks_score(clue, candidate.word),
             )
-            for index, candidate in enumerate(ranked_candidates)
+            for candidate in candidates
         ]
 
 

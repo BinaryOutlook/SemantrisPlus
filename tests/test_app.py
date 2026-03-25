@@ -74,6 +74,20 @@ class DummyRanker:
         )
 
 
+class BatchRecordingBlocksRanker(DummyRanker):
+    def __init__(self) -> None:
+        self.primary_batch_sizes: list[int] = []
+        self.scoring_batch_sizes: list[int] = []
+
+    def pick_blocks_primary_candidate(self, clue, candidates):
+        self.primary_batch_sizes.append(len(candidates))
+        return super().pick_blocks_primary_candidate(clue, candidates)
+
+    def score_blocks_candidates(self, clue, candidates):
+        self.scoring_batch_sizes.append(len(candidates))
+        return super().score_blocks_candidates(clue, candidates)
+
+
 class AppRouteTests(unittest.TestCase):
     def setUp(self) -> None:
         app_module.app.config.update(TESTING=True)
@@ -205,6 +219,24 @@ class AppRouteTests(unittest.TestCase):
                 self.assertIn("primary_word", payload)
                 self.assertGreaterEqual(payload["state"]["last_chain_size"], 1)
                 self.assertIn("state", payload)
+
+    def test_blocks_turn_batches_llm_requests_into_small_groups(self) -> None:
+        ranker = BatchRecordingBlocksRanker()
+
+        with patch.object(app_module, "RANKER", ranker):
+            with self.client as client:
+                client.get("/api/blocks/state")
+                response = client.post("/api/blocks/turn", json={"clue": "peak"})
+
+                self.assertEqual(response.status_code, 200)
+                self.assertGreaterEqual(len(ranker.primary_batch_sizes), 2)
+                self.assertTrue(ranker.scoring_batch_sizes)
+                self.assertTrue(
+                    all(size <= app_module.BLOCKS_PRIMARY_BATCH_SIZE for size in ranker.primary_batch_sizes)
+                )
+                self.assertTrue(
+                    all(size <= app_module.BLOCKS_SCORING_BATCH_SIZE for size in ranker.scoring_batch_sizes)
+                )
 
 
 if __name__ == "__main__":

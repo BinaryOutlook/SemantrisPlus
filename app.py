@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
@@ -16,8 +16,9 @@ from game_logic import (
     resolve_turn,
 )
 from game_logic_blocks import (
+    BLOCKS_COMBO_THRESHOLD,
     initialize_blocks_state,
-    occupied_component_from,
+    occupied_neighbors,
     occupied_word_indices,
     resolve_blocks_turn,
     serialize_blocks_grid,
@@ -32,6 +33,7 @@ from game_logic_restriction import (
 )
 from llm_client import (
     BlocksCandidate,
+    BlocksPrimaryChoiceResult,
     BlocksCandidateScore,
     BlocksCandidateScoringResult,
     build_ranker_from_env,
@@ -62,6 +64,8 @@ MODE_PAGE_ENDPOINTS = {
     MODE_IDS["restriction"]: "restriction_mode",
     MODE_IDS["blocks"]: "blocks_mode",
 }
+BLOCKS_PRIMARY_BATCH_SIZE = 8
+BLOCKS_SCORING_BATCH_SIZE = 6
 
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY") or os.urandom(24)
@@ -76,6 +80,49 @@ def _emit_blocks_app_debug_trace(label: str, payload: Any) -> None:
         return
 
     print(f"[Blocks App Debug] {label}={payload}", flush=True)
+
+
+@dataclass
+class BlocksLlmAggregate:
+    latency_ms: int = 0
+    providers: list[str] = field(default_factory=list)
+    used_fallback: bool = False
+    warnings: list[str] = field(default_factory=list)
+
+    def record(self, result: Any) -> None:
+        self.latency_ms += max(0, int(getattr(result, "latency_ms", 0) or 0))
+
+        provider = getattr(result, "provider", None)
+        if isinstance(provider, str) and provider and provider not in self.providers:
+            self.providers.append(provider)
+
+        if bool(getattr(result, "used_fallback", False)):
+            self.used_fallback = True
+
+        warning = getattr(result, "warning", None)
+        if isinstance(warning, str) and warning and warning not in self.warnings:
+            self.warnings.append(warning)
+
+    @property
+    def provider_label(self) -> str | None:
+        return _combine_provider_labels(*self.providers)
+
+    @property
+    def warning_text(self) -> str | None:
+        return _join_warnings(*self.warnings)
+
+
+def _partition_evenly(items: Sequence[Any], max_batch_size: int) -> list[list[Any]]:
+    if max_batch_size <= 0:
+        raise ValueError("Batch size must be positive.")
+    if not items:
+        return []
+
+    batch_count = max(1, (len(items) + max_batch_size - 1) // max_batch_size)
+    batches: list[list[Any]] = [[] for _ in range(batch_count)]
+    for index, item in enumerate(items):
+        batches[index % batch_count].append(item)
+    return [batch for batch in batches if batch]
 
 
 def load_vocabulary(vocab_file: Path) -> list[str]:
@@ -412,19 +459,173 @@ def _current_target_word(state: dict[str, Any], pack: VocabularyPack) -> str | N
 
 
 def _combine_provider_labels(*providers: str | None) -> str | None:
-    labels = [provider for provider in providers if provider]
+    labels: list[str] = []
+    for provider in providers:
+        if not provider or provider in labels:
+            continue
+        labels.append(provider)
     if not labels:
         return None
-    if len(set(labels)) == 1:
+    if len(labels) == 1:
         return labels[0]
     return "/".join(labels)
 
 
 def _join_warnings(*warnings: str | None) -> str | None:
-    parts = [warning for warning in warnings if warning]
+    parts: list[str] = []
+    for warning in warnings:
+        if not warning or warning in parts:
+            continue
+        parts.append(warning)
     if not parts:
         return None
     return " ".join(parts)
+
+
+def _build_blocks_candidates(
+    cells: Sequence[int],
+    grid_indices: Sequence[int | None],
+    pack: VocabularyPack,
+) -> list[BlocksCandidate]:
+    return [
+        BlocksCandidate(candidate_id=cell, word=pack.words[word_index])
+        for cell in cells
+        if (word_index := grid_indices[cell]) is not None
+    ]
+
+
+def _select_blocks_primary_candidate(
+    clue: str,
+    candidates: Sequence[BlocksCandidate],
+) -> BlocksPrimaryChoiceResult:
+    if not candidates:
+        raise ValueError("Blocks mode requires at least one occupied candidate.")
+
+    if len(candidates) == 1:
+        return BlocksPrimaryChoiceResult(
+            candidate_id=candidates[0].candidate_id,
+            latency_ms=0,
+            provider="local-single-candidate",
+            used_fallback=False,
+            warning=None,
+        )
+
+    aggregate = BlocksLlmAggregate()
+    round_candidates = list(candidates)
+    round_number = 1
+
+    while len(round_candidates) > 1:
+        batches = _partition_evenly(round_candidates, BLOCKS_PRIMARY_BATCH_SIZE)
+        _emit_blocks_app_debug_trace(
+            f"primary_round_{round_number}_batches",
+            [[(candidate.candidate_id, candidate.word) for candidate in batch] for batch in batches],
+        )
+
+        winners: list[BlocksCandidate] = []
+        winner_trace: list[dict[str, Any]] = []
+        for batch in batches:
+            if len(batch) == 1:
+                selected_id = batch[0].candidate_id
+                batch_provider = "local-bye"
+                batch_used_fallback = False
+                batch_warning = None
+            else:
+                result = RANKER.pick_blocks_primary_candidate(clue, batch)
+                aggregate.record(result)
+                selected_id = result.candidate_id
+                batch_provider = result.provider
+                batch_used_fallback = result.used_fallback
+                batch_warning = result.warning
+
+            batch_lookup = {candidate.candidate_id: candidate for candidate in batch}
+            winner = batch_lookup[selected_id]
+            winners.append(winner)
+            winner_trace.append(
+                {
+                    "candidate_id": winner.candidate_id,
+                    "word": winner.word,
+                    "provider": batch_provider,
+                    "used_fallback": batch_used_fallback,
+                    "warning": batch_warning,
+                }
+            )
+
+        _emit_blocks_app_debug_trace(f"primary_round_{round_number}_winners", winner_trace)
+        round_candidates = winners
+        round_number += 1
+
+    return BlocksPrimaryChoiceResult(
+        candidate_id=round_candidates[0].candidate_id,
+        latency_ms=aggregate.latency_ms,
+        provider=aggregate.provider_label or "local-single-candidate",
+        used_fallback=aggregate.used_fallback,
+        warning=aggregate.warning_text,
+    )
+
+
+def _score_blocks_frontier(
+    clue: str,
+    state: dict[str, Any],
+    pack: VocabularyPack,
+    primary_cell: int,
+) -> tuple[dict[int, int], BlocksLlmAggregate]:
+    grid_indices = list(state["grid_indices"])
+    width = int(state["grid_width"])
+    height = int(state["grid_height"])
+    aggregate = BlocksLlmAggregate()
+    scored_cells: dict[int, int] = {primary_cell: 100}
+    expanding_cells = [primary_cell]
+    seen_cells: set[int] = {primary_cell}
+    wave_number = 1
+
+    while expanding_cells:
+        frontier_cells: list[int] = []
+        for cell in expanding_cells:
+            for neighbor in occupied_neighbors(grid_indices, cell, width, height):
+                if neighbor in seen_cells or grid_indices[neighbor] is None:
+                    continue
+                seen_cells.add(neighbor)
+                frontier_cells.append(neighbor)
+
+        if not frontier_cells:
+            break
+
+        frontier_cells = sorted(set(frontier_cells))
+        frontier_candidates = _build_blocks_candidates(frontier_cells, grid_indices, pack)
+        batches = _partition_evenly(frontier_candidates, BLOCKS_SCORING_BATCH_SIZE)
+        _emit_blocks_app_debug_trace(
+            f"scoring_wave_{wave_number}_batches",
+            [[(candidate.candidate_id, candidate.word) for candidate in batch] for batch in batches],
+        )
+
+        wave_scores: dict[int, int] = {}
+        for batch in batches:
+            result = RANKER.score_blocks_candidates(clue, batch)
+            aggregate.record(result)
+            for item in result.scored_candidates:
+                wave_scores[item.candidate_id] = item.score
+                scored_cells[item.candidate_id] = item.score
+
+        scored_trace = [
+            {
+                "candidate_id": cell,
+                "word": pack.words[grid_indices[cell]],
+                "score": wave_scores[cell],
+            }
+            for cell in frontier_cells
+            if cell in wave_scores and grid_indices[cell] is not None
+        ]
+        _emit_blocks_app_debug_trace(f"scoring_wave_{wave_number}_scores", scored_trace)
+
+        expanding_cells = [
+            cell
+            for cell in frontier_cells
+            if wave_scores.get(cell, 0) >= BLOCKS_COMBO_THRESHOLD
+        ]
+        _emit_blocks_app_debug_trace(f"scoring_wave_{wave_number}_advancing", expanding_cells)
+        wave_number += 1
+
+    return scored_cells, aggregate
 
 
 @app.get("/")
@@ -749,7 +950,7 @@ def blocks_turn() -> Any:
         [(candidate.candidate_id, candidate.word) for candidate in occupied_candidates],
     )
 
-    primary_choice = RANKER.pick_blocks_primary_candidate(clue, occupied_candidates)
+    primary_choice = _select_blocks_primary_candidate(clue, occupied_candidates)
     primary_cell = primary_choice.candidate_id
     _emit_blocks_app_debug_trace(
         "primary_choice",
@@ -761,34 +962,17 @@ def blocks_turn() -> Any:
         },
     )
 
-    component_cells = occupied_component_from(
-        state["grid_indices"],
-        primary_cell,
-        state["grid_width"],
-        state["grid_height"],
+    scored_cells, scoring_meta = _score_blocks_frontier(clue, state, pack, primary_cell)
+    scoring = BlocksCandidateScoringResult(
+        scored_candidates=[
+            BlocksCandidateScore(candidate_id=cell, score=score)
+            for cell, score in sorted(scored_cells.items())
+        ],
+        latency_ms=scoring_meta.latency_ms,
+        provider=scoring_meta.provider_label or "local-frontier-expansion",
+        used_fallback=scoring_meta.used_fallback,
+        warning=scoring_meta.warning_text,
     )
-    _emit_blocks_app_debug_trace("component_cells", component_cells)
-    component_candidates = [
-        BlocksCandidate(candidate_id=cell, word=pack.words[state["grid_indices"][cell]])
-        for cell in component_cells
-        if state["grid_indices"][cell] is not None
-    ]
-    _emit_blocks_app_debug_trace(
-        "component_candidates",
-        [(candidate.candidate_id, candidate.word) for candidate in component_candidates],
-    )
-    if len(component_candidates) == 1:
-        scoring = BlocksCandidateScoringResult(
-            scored_candidates=[
-                BlocksCandidateScore(candidate_id=component_candidates[0].candidate_id, score=100)
-            ],
-            latency_ms=0,
-            provider="local-single-candidate",
-            used_fallback=False,
-            warning=None,
-        )
-    else:
-        scoring = RANKER.score_blocks_candidates(clue, component_candidates)
     scored_cells = {
         item.candidate_id: item.score
         for item in scoring.scored_candidates
