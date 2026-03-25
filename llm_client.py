@@ -55,6 +55,27 @@ Rules:
 - Higher scores mean stronger semantic relevance to the clue.
 """.strip()
 
+BLOCKS_PRIMARY_SYSTEM_PROMPT = """
+You choose the single best candidate for a semantic chain-reaction word game.
+
+Rules:
+- Return JSON only.
+- Pick exactly one candidate_id from the provided candidate list.
+- candidate_id must match one of the provided candidates exactly.
+- Do not return explanations or extra text.
+""".strip()
+
+BLOCKS_SCORING_SYSTEM_PROMPT = """
+You score how strongly each provided candidate relates to the clue.
+
+Rules:
+- Return JSON only.
+- Use every provided candidate_id exactly once.
+- candidate_id must match one of the provided candidates exactly.
+- Each score must be an integer from 0 to 100.
+- candidate_id is authoritative; word text is only a label.
+""".strip()
+
 
 def render_ranking_input(clue: str, words: Sequence[str]) -> str:
     return f"Clue: {clue.strip()}\nWords:\n" + "\n".join(words)
@@ -83,6 +104,42 @@ def render_scoring_input(clue: str, words: Sequence[str]) -> str:
 
 def render_scoring_prompt(clue: str, words: Sequence[str]) -> str:
     return f"{SCORING_SYSTEM_PROMPT}\n\n{render_scoring_input(clue, words)}"
+
+
+@dataclass(frozen=True)
+class BlocksCandidate:
+    candidate_id: int
+    word: str
+
+
+def render_blocks_candidates(candidates: Sequence[BlocksCandidate]) -> str:
+    return "\n".join(f"{candidate.candidate_id}: {candidate.word}" for candidate in candidates)
+
+
+def render_blocks_primary_input(clue: str, candidates: Sequence[BlocksCandidate]) -> str:
+    return (
+        f"Clue: {clue.strip()}\n"
+        f"Candidate count: {len(candidates)}\n"
+        "Candidates:\n"
+        + render_blocks_candidates(candidates)
+    )
+
+
+def render_blocks_primary_prompt(clue: str, candidates: Sequence[BlocksCandidate]) -> str:
+    return f"{BLOCKS_PRIMARY_SYSTEM_PROMPT}\n\n{render_blocks_primary_input(clue, candidates)}"
+
+
+def render_blocks_scoring_input(clue: str, candidates: Sequence[BlocksCandidate]) -> str:
+    return (
+        f"Clue: {clue.strip()}\n"
+        f"Candidate count: {len(candidates)}\n"
+        "Candidates:\n"
+        + render_blocks_candidates(candidates)
+    )
+
+
+def render_blocks_scoring_prompt(clue: str, candidates: Sequence[BlocksCandidate]) -> str:
+    return f"{BLOCKS_SCORING_SYSTEM_PROMPT}\n\n{render_blocks_scoring_input(clue, candidates)}"
 
 
 class RankingError(RuntimeError):
@@ -118,6 +175,30 @@ class WordScore:
 @dataclass
 class WordScoringResult:
     scored_words: list[WordScore]
+    latency_ms: int
+    provider: str
+    used_fallback: bool
+    warning: str | None = None
+
+
+@dataclass
+class BlocksPrimaryChoiceResult:
+    candidate_id: int
+    latency_ms: int
+    provider: str
+    used_fallback: bool
+    warning: str | None = None
+
+
+@dataclass(frozen=True)
+class BlocksCandidateScore:
+    candidate_id: int
+    score: int
+
+
+@dataclass
+class BlocksCandidateScoringResult:
+    scored_candidates: list[BlocksCandidateScore]
     latency_ms: int
     provider: str
     used_fallback: bool
@@ -162,6 +243,25 @@ class WordScoringPayload(BaseModel):
     scored_words: list[WordScoreItemPayload]
 
 
+class BlocksPrimaryPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    candidate_id: int
+
+
+class BlocksCandidateScoreItemPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    candidate_id: int
+    score: int
+
+
+class BlocksCandidateScoringPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scored_candidates: list[BlocksCandidateScoreItemPayload]
+
+
 class PrimaryRanker(Protocol):
     provider: str
 
@@ -181,6 +281,20 @@ class PrimaryRanker(Protocol):
         ...
 
     def score_words_against_clue(self, clue: str, words: Sequence[str]) -> list[WordScore]:
+        ...
+
+    def pick_blocks_primary_candidate(
+        self,
+        clue: str,
+        candidates: Sequence[BlocksCandidate],
+    ) -> int:
+        ...
+
+    def score_blocks_candidates(
+        self,
+        clue: str,
+        candidates: Sequence[BlocksCandidate],
+    ) -> list[BlocksCandidateScore]:
         ...
 
 
@@ -253,6 +367,37 @@ def validate_scored_words(
     return validated
 
 
+def validate_candidate_id(candidate_id: int, expected_candidate_ids: Sequence[int]) -> int:
+    if candidate_id not in set(expected_candidate_ids):
+        raise RankingError("Model returned an unknown candidate id.")
+    return candidate_id
+
+
+def validate_scored_candidates(
+    scored_candidates: Sequence[BlocksCandidateScore],
+    expected_candidate_ids: Sequence[int],
+) -> list[BlocksCandidateScore]:
+    candidate_ids = [item.candidate_id for item in scored_candidates]
+
+    if len(candidate_ids) != len(expected_candidate_ids):
+        raise RankingError("Model returned the wrong number of scored candidates.")
+
+    if len(set(candidate_ids)) != len(expected_candidate_ids):
+        raise RankingError("Model returned duplicate candidate ids.")
+
+    if set(candidate_ids) != set(expected_candidate_ids):
+        raise RankingError("Model returned unknown or missing candidate ids.")
+
+    validated: list[BlocksCandidateScore] = []
+    for item in scored_candidates:
+        if not isinstance(item.score, int):
+            raise RankingError("Model returned a non-integer candidate score.")
+        if item.score < 0 or item.score > 100:
+            raise RankingError("Model returned a candidate score outside the 0..100 range.")
+        validated.append(item)
+    return validated
+
+
 def _parse_ranked_words_payload(payload: object) -> list[str] | None:
     if payload is None:
         return None
@@ -309,6 +454,87 @@ def _parse_word_scoring_payload(
     )
 
 
+def _parse_blocks_primary_payload(
+    payload: object,
+    expected_candidate_ids: Sequence[int],
+) -> int | None:
+    if payload is None:
+        return None
+
+    candidate_id: int | None = None
+    if isinstance(payload, int):
+        candidate_id = payload
+    elif isinstance(payload, str) and payload.strip().isdigit():
+        candidate_id = int(payload.strip())
+    elif isinstance(payload, dict):
+        raw_value = payload.get("candidate_id", payload.get("id"))
+        if isinstance(raw_value, int):
+            candidate_id = raw_value
+        elif isinstance(raw_value, str) and raw_value.strip().isdigit():
+            candidate_id = int(raw_value.strip())
+        else:
+            try:
+                parsed = BlocksPrimaryPayload.model_validate(payload)
+            except ValidationError:
+                parsed = None
+            if parsed is not None:
+                candidate_id = parsed.candidate_id
+
+    if candidate_id is None:
+        return None
+
+    return validate_candidate_id(candidate_id, expected_candidate_ids)
+
+
+def _parse_blocks_candidate_scoring_payload(
+    payload: object,
+    expected_candidate_ids: Sequence[int],
+) -> list[BlocksCandidateScore] | None:
+    if payload is None:
+        return None
+
+    scored_candidates: list[BlocksCandidateScore] | None = None
+    if isinstance(payload, list):
+        rows: list[BlocksCandidateScore] = []
+        for item in payload:
+            if not isinstance(item, dict):
+                return None
+            candidate_id = item.get("candidate_id", item.get("id"))
+            score = item.get("score")
+            if not isinstance(candidate_id, int) or not isinstance(score, int):
+                return None
+            rows.append(BlocksCandidateScore(candidate_id=candidate_id, score=score))
+        scored_candidates = rows
+    elif isinstance(payload, dict) and "scored_candidates" not in payload:
+        rows: list[BlocksCandidateScore] = []
+        for key, value in payload.items():
+            if isinstance(value, dict):
+                candidate_id = value.get("candidate_id", value.get("id", key))
+                score = value.get("score")
+            else:
+                candidate_id = key
+                score = value
+            try:
+                candidate_id_int = int(candidate_id)
+            except (TypeError, ValueError):
+                return None
+            if not isinstance(score, int):
+                return None
+            rows.append(BlocksCandidateScore(candidate_id=candidate_id_int, score=score))
+        scored_candidates = rows
+    else:
+        try:
+            parsed = BlocksCandidateScoringPayload.model_validate(payload)
+        except ValidationError:
+            return None
+        scored_candidates = [
+            BlocksCandidateScore(candidate_id=item.candidate_id, score=item.score)
+            for item in parsed.scored_candidates
+        ]
+
+    return validate_scored_candidates(scored_candidates, expected_candidate_ids)
+
+
 def parse_ranked_words(response_text: str, expected_words: Sequence[str]) -> list[str]:
     cleaned = _strip_code_fences(response_text)
     parsed_words: list[str] | None = None
@@ -359,6 +585,62 @@ def parse_word_scoring(response_text: str, expected_words: Sequence[str]) -> lis
             return parsed
 
     raise RankingError("Model returned an invalid word-scoring payload.")
+
+
+def parse_blocks_primary_candidate(
+    response_text: str,
+    expected_candidate_ids: Sequence[int],
+) -> int:
+    cleaned = _strip_code_fences(response_text)
+
+    for candidate in filter(None, [cleaned, _extract_json_candidate(cleaned)]):
+        try:
+            parsed = _parse_blocks_primary_payload(json.loads(candidate), expected_candidate_ids)
+        except json.JSONDecodeError:
+            parsed = None
+
+        if parsed is not None:
+            return parsed
+
+    for match in re.findall(r"\d+", cleaned):
+        try:
+            candidate_id = validate_candidate_id(int(match), expected_candidate_ids)
+        except RankingError:
+            continue
+        return candidate_id
+
+    raise RankingError("Model returned an invalid blocks primary-candidate payload.")
+
+
+def parse_blocks_candidate_scoring(
+    response_text: str,
+    expected_candidate_ids: Sequence[int],
+) -> list[BlocksCandidateScore]:
+    cleaned = _strip_code_fences(response_text)
+
+    for candidate in filter(None, [cleaned, _extract_json_candidate(cleaned)]):
+        try:
+            parsed = _parse_blocks_candidate_scoring_payload(json.loads(candidate), expected_candidate_ids)
+        except json.JSONDecodeError:
+            parsed = None
+
+        if parsed is not None:
+            return parsed
+
+    line_matches = []
+    for line in cleaned.splitlines():
+        match = re.search(r"(\d+)\s*[:=-]\s*(\d+)", line.strip())
+        if match:
+            line_matches.append(
+                BlocksCandidateScore(
+                    candidate_id=int(match.group(1)),
+                    score=int(match.group(2)),
+                )
+            )
+    if line_matches:
+        return validate_scored_candidates(line_matches, expected_candidate_ids)
+
+    raise RankingError("Model returned an invalid blocks candidate-scoring payload.")
 
 
 def _clean_detail_value(value: Any) -> str | None:
@@ -594,6 +876,18 @@ class GeminiRanker:
             "response_mime_type": "application/json",
             "response_json_schema": WordScoringPayload.model_json_schema(),
         }
+        self._blocks_primary_generation_config = {
+            "temperature": 0.0,
+            "max_output_tokens": 96,
+            "response_mime_type": "application/json",
+            "response_json_schema": BlocksPrimaryPayload.model_json_schema(),
+        }
+        self._blocks_scoring_generation_config = {
+            "temperature": 0.0,
+            "max_output_tokens": 512,
+            "response_mime_type": "application/json",
+            "response_json_schema": BlocksCandidateScoringPayload.model_json_schema(),
+        }
 
     @property
     def model_name(self) -> str:
@@ -651,6 +945,54 @@ class GeminiRanker:
             raise RankingError("Model returned an empty response.")
 
         return parse_word_scoring(text, words)
+
+    def pick_blocks_primary_candidate(
+        self,
+        clue: str,
+        candidates: Sequence[BlocksCandidate],
+    ) -> int:
+        expected_candidate_ids = [candidate.candidate_id for candidate in candidates]
+        response = self._client.models.generate_content(
+            model=self._model_name,
+            contents=render_blocks_primary_prompt(clue, candidates),
+            config=self._blocks_primary_generation_config,
+        )
+        parsed_candidate_id = _parse_blocks_primary_payload(
+            getattr(response, "parsed", None),
+            expected_candidate_ids,
+        )
+        if parsed_candidate_id is not None:
+            return parsed_candidate_id
+
+        text = getattr(response, "text", "") or ""
+        if not text.strip():
+            raise RankingError("Model returned an empty response.")
+
+        return parse_blocks_primary_candidate(text, expected_candidate_ids)
+
+    def score_blocks_candidates(
+        self,
+        clue: str,
+        candidates: Sequence[BlocksCandidate],
+    ) -> list[BlocksCandidateScore]:
+        expected_candidate_ids = [candidate.candidate_id for candidate in candidates]
+        response = self._client.models.generate_content(
+            model=self._model_name,
+            contents=render_blocks_scoring_prompt(clue, candidates),
+            config=self._blocks_scoring_generation_config,
+        )
+        parsed_payload = _parse_blocks_candidate_scoring_payload(
+            getattr(response, "parsed", None),
+            expected_candidate_ids,
+        )
+        if parsed_payload is not None:
+            return parsed_payload
+
+        text = getattr(response, "text", "") or ""
+        if not text.strip():
+            raise RankingError("Model returned an empty response.")
+
+        return parse_blocks_candidate_scoring(text, expected_candidate_ids)
 
 
 class OpenAICompatibleRanker:
@@ -719,6 +1061,32 @@ class OpenAICompatibleRanker:
             words,
         )
 
+    def pick_blocks_primary_candidate(
+        self,
+        clue: str,
+        candidates: Sequence[BlocksCandidate],
+    ) -> int:
+        return parse_blocks_primary_candidate(
+            self._complete(
+                BLOCKS_PRIMARY_SYSTEM_PROMPT,
+                render_blocks_primary_input(clue, candidates),
+            ),
+            [candidate.candidate_id for candidate in candidates],
+        )
+
+    def score_blocks_candidates(
+        self,
+        clue: str,
+        candidates: Sequence[BlocksCandidate],
+    ) -> list[BlocksCandidateScore]:
+        return parse_blocks_candidate_scoring(
+            self._complete(
+                BLOCKS_SCORING_SYSTEM_PROMPT,
+                render_blocks_scoring_input(clue, candidates),
+            ),
+            [candidate.candidate_id for candidate in candidates],
+        )
+
 
 class HeuristicRanker:
     provider = "heuristic-fallback"
@@ -747,6 +1115,44 @@ class HeuristicRanker:
         return [
             WordScore(word=word, score=max(0, round(100 - index * step)))
             for index, word in enumerate(ranked_words)
+        ]
+
+    def pick_blocks_primary_candidate(
+        self,
+        clue: str,
+        candidates: Sequence[BlocksCandidate],
+    ) -> int:
+        if not candidates:
+            raise RankingError("No block candidates were provided.")
+        ranked_candidates = sorted(
+            candidates,
+            key=lambda candidate: self._score_tuple(clue, candidate.word),
+            reverse=True,
+        )
+        return ranked_candidates[0].candidate_id
+
+    def score_blocks_candidates(
+        self,
+        clue: str,
+        candidates: Sequence[BlocksCandidate],
+    ) -> list[BlocksCandidateScore]:
+        ranked_candidates = sorted(
+            candidates,
+            key=lambda candidate: self._score_tuple(clue, candidate.word),
+            reverse=True,
+        )
+        if not ranked_candidates:
+            return []
+        if len(ranked_candidates) == 1:
+            return [BlocksCandidateScore(candidate_id=ranked_candidates[0].candidate_id, score=100)]
+
+        step = 100 / max(1, len(ranked_candidates) - 1)
+        return [
+            BlocksCandidateScore(
+                candidate_id=candidate.candidate_id,
+                score=max(0, round(100 - index * step)),
+            )
+            for index, candidate in enumerate(ranked_candidates)
         ]
 
 
@@ -902,6 +1308,104 @@ class ResilientRanker:
         latency_ms = round((time.perf_counter() - start) * 1000)
         return WordScoringResult(
             scored_words=fallback_scores,
+            latency_ms=latency_ms,
+            provider=self.fallback.provider,
+            used_fallback=True,
+            warning=(
+                self.initial_warning
+                or "Primary provider is not configured, so the local fallback ranker was used."
+            ),
+        )
+
+    def pick_blocks_primary_candidate(
+        self,
+        clue: str,
+        candidates: Sequence[BlocksCandidate],
+    ) -> BlocksPrimaryChoiceResult:
+        start = time.perf_counter()
+
+        if self.primary is not None:
+            try:
+                candidate_id = self.primary.pick_blocks_primary_candidate(clue, candidates)
+                latency_ms = round((time.perf_counter() - start) * 1000)
+                return BlocksPrimaryChoiceResult(
+                    candidate_id=candidate_id,
+                    latency_ms=latency_ms,
+                    provider=self.primary.provider,
+                    used_fallback=False,
+                )
+            except Exception as exc:
+                fallback_candidate_id = self.fallback.pick_blocks_primary_candidate(clue, candidates)
+                latency_ms = round((time.perf_counter() - start) * 1000)
+                return BlocksPrimaryChoiceResult(
+                    candidate_id=fallback_candidate_id,
+                    latency_ms=latency_ms,
+                    provider=self.fallback.provider,
+                    used_fallback=True,
+                    warning=(
+                        "Primary blocks primary-choice provider failed. "
+                        + format_provider_diagnostic(
+                            exc,
+                            provider=getattr(self.primary, "provider", "primary"),
+                            stage="blocks-primary",
+                            context=_provider_context(self.primary),
+                        )
+                    ),
+                )
+
+        fallback_candidate_id = self.fallback.pick_blocks_primary_candidate(clue, candidates)
+        latency_ms = round((time.perf_counter() - start) * 1000)
+        return BlocksPrimaryChoiceResult(
+            candidate_id=fallback_candidate_id,
+            latency_ms=latency_ms,
+            provider=self.fallback.provider,
+            used_fallback=True,
+            warning=(
+                self.initial_warning
+                or "Primary provider is not configured, so the local fallback ranker was used."
+            ),
+        )
+
+    def score_blocks_candidates(
+        self,
+        clue: str,
+        candidates: Sequence[BlocksCandidate],
+    ) -> BlocksCandidateScoringResult:
+        start = time.perf_counter()
+
+        if self.primary is not None:
+            try:
+                scored_candidates = self.primary.score_blocks_candidates(clue, candidates)
+                latency_ms = round((time.perf_counter() - start) * 1000)
+                return BlocksCandidateScoringResult(
+                    scored_candidates=scored_candidates,
+                    latency_ms=latency_ms,
+                    provider=self.primary.provider,
+                    used_fallback=False,
+                )
+            except Exception as exc:
+                fallback_scores = self.fallback.score_blocks_candidates(clue, candidates)
+                latency_ms = round((time.perf_counter() - start) * 1000)
+                return BlocksCandidateScoringResult(
+                    scored_candidates=fallback_scores,
+                    latency_ms=latency_ms,
+                    provider=self.fallback.provider,
+                    used_fallback=True,
+                    warning=(
+                        "Primary blocks scoring provider failed. "
+                        + format_provider_diagnostic(
+                            exc,
+                            provider=getattr(self.primary, "provider", "primary"),
+                            stage="blocks-scoring",
+                            context=_provider_context(self.primary),
+                        )
+                    ),
+                )
+
+        fallback_scores = self.fallback.score_blocks_candidates(clue, candidates)
+        latency_ms = round((time.perf_counter() - start) * 1000)
+        return BlocksCandidateScoringResult(
+            scored_candidates=fallback_scores,
             latency_ms=latency_ms,
             provider=self.fallback.provider,
             used_fallback=True,

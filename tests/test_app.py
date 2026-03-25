@@ -2,7 +2,15 @@ import unittest
 from unittest.mock import patch
 
 import app as app_module
-from llm_client import RankingResult, RuleJudgeResult, WordScore, WordScoringResult
+from llm_client import (
+    BlocksCandidateScoringResult,
+    BlocksCandidateScore,
+    BlocksPrimaryChoiceResult,
+    RankingResult,
+    RuleJudgeResult,
+    WordScore,
+    WordScoringResult,
+)
 
 
 class DummyRanker:
@@ -36,6 +44,30 @@ class DummyRanker:
         return WordScoringResult(
             scored_words=scored_words,
             latency_ms=18,
+            provider="dummy-ranker",
+            used_fallback=False,
+            warning=None,
+        )
+
+    def pick_blocks_primary_candidate(self, clue, candidates):
+        return BlocksPrimaryChoiceResult(
+            candidate_id=candidates[0].candidate_id,
+            latency_ms=9,
+            provider="dummy-ranker",
+            used_fallback=False,
+            warning=None,
+        )
+
+    def score_blocks_candidates(self, clue, candidates):
+        return BlocksCandidateScoringResult(
+            scored_candidates=[
+                BlocksCandidateScore(
+                    candidate_id=candidate.candidate_id,
+                    score=max(0, 100 - index * 15),
+                )
+                for index, candidate in enumerate(candidates)
+            ],
+            latency_ms=11,
             provider="dummy-ranker",
             used_fallback=False,
             warning=None,

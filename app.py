@@ -30,7 +30,15 @@ from game_logic_restriction import (
     resolve_restriction_turn,
     validate_clue_locally,
 )
-from llm_client import build_ranker_from_env, format_startup_probe_message, normalize_word, run_startup_probe
+from llm_client import (
+    BlocksCandidate,
+    BlocksCandidateScore,
+    BlocksCandidateScoringResult,
+    build_ranker_from_env,
+    format_startup_probe_message,
+    normalize_word,
+    run_startup_probe,
+)
 
 load_dotenv()
 
@@ -720,16 +728,14 @@ def blocks_turn() -> Any:
     if not occupied_indices:
         return jsonify({"error": "The grid is empty. Start a new game to play again."}), 400
 
-    occupied_words = words_for_indices(occupied_indices, pack.words)
-    cell_lookup = {
-        normalize_word(pack.words[word_index]): cell
+    occupied_candidates = [
+        BlocksCandidate(candidate_id=cell, word=pack.words[word_index])
         for cell, word_index in enumerate(state["grid_indices"])
         if word_index is not None
-    }
+    ]
 
-    ranking = RANKER.rank_words(clue, occupied_words)
-    primary_word = ranking.ranked_words[0]
-    primary_cell = cell_lookup[normalize_word(primary_word)]
+    primary_choice = RANKER.pick_blocks_primary_candidate(clue, occupied_candidates)
+    primary_cell = primary_choice.candidate_id
 
     component_cells = occupied_component_from(
         state["grid_indices"],
@@ -737,20 +743,26 @@ def blocks_turn() -> Any:
         state["grid_width"],
         state["grid_height"],
     )
-    component_words = [
-        pack.words[state["grid_indices"][cell]]
+    component_candidates = [
+        BlocksCandidate(candidate_id=cell, word=pack.words[state["grid_indices"][cell]])
         for cell in component_cells
         if state["grid_indices"][cell] is not None
     ]
-    scoring = RANKER.score_words_against_clue(clue, component_words)
-    component_lookup = {
-        normalize_word(pack.words[state["grid_indices"][cell]]): cell
-        for cell in component_cells
-        if state["grid_indices"][cell] is not None
-    }
+    if len(component_candidates) == 1:
+        scoring = BlocksCandidateScoringResult(
+            scored_candidates=[
+                BlocksCandidateScore(candidate_id=component_candidates[0].candidate_id, score=100)
+            ],
+            latency_ms=0,
+            provider="local-single-candidate",
+            used_fallback=False,
+            warning=None,
+        )
+    else:
+        scoring = RANKER.score_blocks_candidates(clue, component_candidates)
     scored_cells = {
-        component_lookup[normalize_word(item.word)]: item.score
-        for item in scoring.scored_words
+        item.candidate_id: item.score
+        for item in scoring.scored_candidates
     }
 
     turn = resolve_blocks_turn(
@@ -762,10 +774,10 @@ def blocks_turn() -> Any:
 
     updated_state = {
         **turn.state,
-        "last_latency_ms": ranking.latency_ms + scoring.latency_ms,
-        "last_provider": _combine_provider_labels(ranking.provider, scoring.provider),
-        "used_fallback": ranking.used_fallback or scoring.used_fallback,
-        "last_warning": _join_warnings(ranking.warning, scoring.warning),
+        "last_latency_ms": primary_choice.latency_ms + scoring.latency_ms,
+        "last_provider": _combine_provider_labels(primary_choice.provider, scoring.provider),
+        "used_fallback": primary_choice.used_fallback or scoring.used_fallback,
+        "last_warning": _join_warnings(primary_choice.warning, scoring.warning),
         "last_clue": clue,
     }
 

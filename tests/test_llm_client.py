@@ -4,12 +4,15 @@ from unittest.mock import patch
 
 import llm_client as llm_module
 from llm_client import (
+    BlocksCandidate,
     GeminiRanker,
     OpenAICompatibleRanker,
     RankingError,
     ResilientRanker,
     build_ranker_from_env,
     format_startup_probe_message,
+    parse_blocks_candidate_scoring,
+    parse_blocks_primary_candidate,
     parse_ranked_words,
     parse_restricted_ranking,
     parse_word_scoring,
@@ -172,6 +175,24 @@ class LLMClientTests(unittest.TestCase):
         self.assertEqual(scored_words[0].score, 100)
         self.assertEqual(len(scored_words), 3)
 
+    def test_parse_blocks_primary_candidate_accepts_json(self) -> None:
+        candidate_id = parse_blocks_primary_candidate(
+            '{"candidate_id": 7}',
+            [3, 7, 11],
+        )
+
+        self.assertEqual(candidate_id, 7)
+
+    def test_parse_blocks_candidate_scoring_accepts_json(self) -> None:
+        scored_candidates = parse_blocks_candidate_scoring(
+            '{"scored_candidates": [{"candidate_id": 3, "score": 100}, {"candidate_id": 7, "score": 62}, {"candidate_id": 11, "score": 14}]}',
+            [3, 7, 11],
+        )
+
+        self.assertEqual(scored_candidates[0].candidate_id, 3)
+        self.assertEqual(scored_candidates[0].score, 100)
+        self.assertEqual(len(scored_candidates), 3)
+
     def test_gemini_ranker_uses_structured_output_config(self) -> None:
         response = FakeGeminiResponse(
             parsed={"ranked_words": ["Anchor", "Orbit", "Harbor"]},
@@ -233,6 +254,47 @@ class LLMClientTests(unittest.TestCase):
         with self.assertRaises(RankingError):
             ranker.rank_words("boat", ["Anchor", "Harbor", "Orbit"])
 
+    def test_openai_ranker_accepts_blocks_primary_candidate_json(self) -> None:
+        response = FakeOpenAICompletion('{"candidate_id": 7}')
+        ranker = OpenAICompatibleRanker(
+            api_key="test-key",
+            base_url="https://example.com/v1",
+            model_name="gpt-5.2-mini",
+            client=FakeOpenAIClient(response),
+        )
+
+        candidate_id = ranker.pick_blocks_primary_candidate(
+            "boat",
+            [
+                BlocksCandidate(candidate_id=3, word="Anchor"),
+                BlocksCandidate(candidate_id=7, word="Harbor"),
+            ],
+        )
+
+        self.assertEqual(candidate_id, 7)
+
+    def test_openai_ranker_accepts_blocks_candidate_scoring_json(self) -> None:
+        response = FakeOpenAICompletion(
+            '{"scored_candidates": [{"candidate_id": 3, "score": 100}, {"candidate_id": 7, "score": 50}]}'
+        )
+        ranker = OpenAICompatibleRanker(
+            api_key="test-key",
+            base_url="https://example.com/v1",
+            model_name="gpt-5.2-mini",
+            client=FakeOpenAIClient(response),
+        )
+
+        scored_candidates = ranker.score_blocks_candidates(
+            "boat",
+            [
+                BlocksCandidate(candidate_id=3, word="Anchor"),
+                BlocksCandidate(candidate_id=7, word="Harbor"),
+            ],
+        )
+
+        self.assertEqual(scored_candidates[0].candidate_id, 3)
+        self.assertEqual(scored_candidates[1].score, 50)
+
     def test_resilient_ranker_falls_back_when_primary_fails_at_runtime(self) -> None:
         ranker = ResilientRanker(primary=ExplodingPrimary())
 
@@ -260,6 +322,36 @@ class LLMClientTests(unittest.TestCase):
         self.assertTrue(result.used_fallback)
         self.assertEqual(result.provider, "heuristic-fallback")
         self.assertEqual(len(result.scored_words), 3)
+
+    def test_resilient_ranker_blocks_primary_falls_back_when_primary_fails(self) -> None:
+        ranker = ResilientRanker(primary=ExplodingPrimary())
+
+        result = ranker.pick_blocks_primary_candidate(
+            "boat",
+            [
+                BlocksCandidate(candidate_id=2, word="Anchor"),
+                BlocksCandidate(candidate_id=5, word="Harbor"),
+            ],
+        )
+
+        self.assertTrue(result.used_fallback)
+        self.assertIn(result.candidate_id, {2, 5})
+        self.assertIn("blocks-primary", result.warning)
+
+    def test_resilient_ranker_blocks_scoring_falls_back_when_primary_fails(self) -> None:
+        ranker = ResilientRanker(primary=ExplodingPrimary())
+
+        result = ranker.score_blocks_candidates(
+            "boat",
+            [
+                BlocksCandidate(candidate_id=2, word="Anchor"),
+                BlocksCandidate(candidate_id=5, word="Harbor"),
+            ],
+        )
+
+        self.assertTrue(result.used_fallback)
+        self.assertEqual(len(result.scored_candidates), 2)
+        self.assertIn("blocks-scoring", result.warning)
 
     def test_build_ranker_from_env_warns_when_gemini_api_key_is_missing(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
