@@ -161,30 +161,7 @@ npm install
 
 ### 2. Configure environment variables
 
-Create a `.env` file in the project root:
-
-```env
-SEMANTRIS_LLM_PROVIDER="gemini"
-
-GEMINI_API_KEY="YOUR_GEMINI_API_KEY"
-GEMINI_MODEL="gemini-2.5-flash-lite"
-
-OPENAI_API_KEY="YOUR_OPENAI_API_KEY"
-OPENAI_BASE_URL="https://api.openai.com/v1"
-OPENAI_MODEL="gpt-5.2-mini"
-
-FLASK_SECRET_KEY="YOUR_SECRET_KEY"
-```
-
-Optional configuration:
-
-```env
-SEMANTRIS_VOCAB_FILE="assets/general_1.txt"
-PORT="5001"
-FLASK_DEBUG="1"
-```
-
-A starter template is also available at `.env.example`.
+Create a `.env` file in the project root based on the starter template is also available at `.env.example`.
 
 ### 3. Run the app
 
@@ -228,6 +205,8 @@ python3 -m unittest discover -s tests
 
 Vocabulary packs are plain newline-separated `.txt` files under `assets/`.
 
+The main webpage automatically populates the vocabulary-pack dropdown by scanning the `assets/` directory for `.txt` files, so adding a new pack there makes it available in the UI.
+
 Current included packs:
 
 - `assets/general_1.txt`
@@ -235,7 +214,13 @@ Current included packs:
 - `assets/basic_vocab.txt`
 - `assets/aviation_1.txt`
 
-To switch packs, set:
+If you want to change the default pack shown on startup, update this parameter in [app.py](/Users/leoliang/StudyMain/SemantrisPlus/app.py#L24):
+
+```python
+DEFAULT_VOCAB_FILE = ASSETS_DIR / "aviation_1.txt"
+```
+
+You can also override the startup default with an environment variable:
 
 ```env
 SEMANTRIS_VOCAB_FILE="assets/aviation_1.txt"
@@ -260,7 +245,7 @@ When `openai` mode is active, the backend uses the `openai` Python client and ca
 
 Only one remote provider is active per process. The app does not fail over from one remote provider to the other at runtime.
 
-If the configured remote provider is unavailable, fails validation, or cannot initialize, the backend falls back to a deterministic local heuristic ranker so the session does not hard-fail.
+If the configured remote provider is unavailable(timed out), fails validation checks, or cannot initialize, the backend falls back to a deterministic local heuristic ranker so the session does not hard-fail.
 
 This fallback is intentionally simple. It is a resilience feature, not a semantic replacement for the primary model.
 
