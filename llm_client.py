@@ -62,6 +62,9 @@ Rules:
 - Return JSON only.
 - Pick exactly one candidate_id from the provided candidate list.
 - candidate_id must match one of the provided candidates exactly.
+- candidate_id is the only meaningful output field.
+- Never return the word text instead of the candidate_id.
+- Example valid response: {"candidate_id": 7}
 - Do not return explanations or extra text.
 """.strip()
 
@@ -74,6 +77,7 @@ Rules:
 - candidate_id must match one of the provided candidates exactly.
 - Each score must be an integer from 0 to 100.
 - candidate_id is authoritative; word text is only a label.
+- Example valid response: {"scored_candidates": [{"candidate_id": 7, "score": 91}, {"candidate_id": 12, "score": 44}]}
 """.strip()
 
 
@@ -140,6 +144,40 @@ def render_blocks_scoring_input(clue: str, candidates: Sequence[BlocksCandidate]
 
 def render_blocks_scoring_prompt(clue: str, candidates: Sequence[BlocksCandidate]) -> str:
     return f"{BLOCKS_SCORING_SYSTEM_PROMPT}\n\n{render_blocks_scoring_input(clue, candidates)}"
+
+
+def _env_flag(name: str) -> bool:
+    return os.getenv(name, "0").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _emit_blocks_llm_debug_trace(
+    *,
+    stage: str,
+    model_name: str,
+    request_text: str,
+    response_text: str,
+    response_parsed: Any,
+    expected_candidate_ids: Sequence[int],
+    error: Exception | None = None,
+    force: bool = False,
+) -> None:
+    if not force and not _env_flag("SEMANTRIS_DEBUG_BLOCKS_LLM"):
+        return
+
+    print(f"[Blocks LLM Debug] stage={stage} model={model_name}", flush=True)
+    print("[Blocks LLM Debug] expected_candidate_ids=", list(expected_candidate_ids), flush=True)
+    print("[Blocks LLM Debug] request_begin", flush=True)
+    print(request_text, flush=True)
+    print("[Blocks LLM Debug] request_end", flush=True)
+    print("[Blocks LLM Debug] response_parsed=", repr(response_parsed), flush=True)
+    print("[Blocks LLM Debug] response_text_begin", flush=True)
+    print(response_text if response_text else "<empty>", flush=True)
+    print("[Blocks LLM Debug] response_text_end", flush=True)
+    if error is not None:
+        print(
+            f"[Blocks LLM Debug] validation_error={error.__class__.__name__}: {error}",
+            flush=True,
+        )
 
 
 class RankingError(RuntimeError):
@@ -952,23 +990,58 @@ class GeminiRanker:
         candidates: Sequence[BlocksCandidate],
     ) -> int:
         expected_candidate_ids = [candidate.candidate_id for candidate in candidates]
+        prompt = render_blocks_primary_prompt(clue, candidates)
         response = self._client.models.generate_content(
             model=self._model_name,
-            contents=render_blocks_primary_prompt(clue, candidates),
+            contents=prompt,
             config=self._blocks_primary_generation_config,
         )
+        response_parsed = getattr(response, "parsed", None)
+        response_text = getattr(response, "text", "") or ""
         parsed_candidate_id = _parse_blocks_primary_payload(
-            getattr(response, "parsed", None),
+            response_parsed,
             expected_candidate_ids,
         )
         if parsed_candidate_id is not None:
+            _emit_blocks_llm_debug_trace(
+                stage="blocks-primary",
+                model_name=self._model_name,
+                request_text=prompt,
+                response_text=response_text,
+                response_parsed=response_parsed,
+                expected_candidate_ids=expected_candidate_ids,
+                force=False,
+            )
             return parsed_candidate_id
 
-        text = getattr(response, "text", "") or ""
-        if not text.strip():
+        if not response_text.strip():
+            error = RankingError("Model returned an empty response.")
+            _emit_blocks_llm_debug_trace(
+                stage="blocks-primary",
+                model_name=self._model_name,
+                request_text=prompt,
+                response_text=response_text,
+                response_parsed=response_parsed,
+                expected_candidate_ids=expected_candidate_ids,
+                error=error,
+                force=True,
+            )
             raise RankingError("Model returned an empty response.")
 
-        return parse_blocks_primary_candidate(text, expected_candidate_ids)
+        try:
+            return parse_blocks_primary_candidate(response_text, expected_candidate_ids)
+        except Exception as exc:
+            _emit_blocks_llm_debug_trace(
+                stage="blocks-primary",
+                model_name=self._model_name,
+                request_text=prompt,
+                response_text=response_text,
+                response_parsed=response_parsed,
+                expected_candidate_ids=expected_candidate_ids,
+                error=exc if isinstance(exc, Exception) else None,
+                force=True,
+            )
+            raise
 
     def score_blocks_candidates(
         self,
@@ -976,23 +1049,58 @@ class GeminiRanker:
         candidates: Sequence[BlocksCandidate],
     ) -> list[BlocksCandidateScore]:
         expected_candidate_ids = [candidate.candidate_id for candidate in candidates]
+        prompt = render_blocks_scoring_prompt(clue, candidates)
         response = self._client.models.generate_content(
             model=self._model_name,
-            contents=render_blocks_scoring_prompt(clue, candidates),
+            contents=prompt,
             config=self._blocks_scoring_generation_config,
         )
+        response_parsed = getattr(response, "parsed", None)
+        response_text = getattr(response, "text", "") or ""
         parsed_payload = _parse_blocks_candidate_scoring_payload(
-            getattr(response, "parsed", None),
+            response_parsed,
             expected_candidate_ids,
         )
         if parsed_payload is not None:
+            _emit_blocks_llm_debug_trace(
+                stage="blocks-scoring",
+                model_name=self._model_name,
+                request_text=prompt,
+                response_text=response_text,
+                response_parsed=response_parsed,
+                expected_candidate_ids=expected_candidate_ids,
+                force=False,
+            )
             return parsed_payload
 
-        text = getattr(response, "text", "") or ""
-        if not text.strip():
+        if not response_text.strip():
+            error = RankingError("Model returned an empty response.")
+            _emit_blocks_llm_debug_trace(
+                stage="blocks-scoring",
+                model_name=self._model_name,
+                request_text=prompt,
+                response_text=response_text,
+                response_parsed=response_parsed,
+                expected_candidate_ids=expected_candidate_ids,
+                error=error,
+                force=True,
+            )
             raise RankingError("Model returned an empty response.")
 
-        return parse_blocks_candidate_scoring(text, expected_candidate_ids)
+        try:
+            return parse_blocks_candidate_scoring(response_text, expected_candidate_ids)
+        except Exception as exc:
+            _emit_blocks_llm_debug_trace(
+                stage="blocks-scoring",
+                model_name=self._model_name,
+                request_text=prompt,
+                response_text=response_text,
+                response_parsed=response_parsed,
+                expected_candidate_ids=expected_candidate_ids,
+                error=exc if isinstance(exc, Exception) else None,
+                force=True,
+            )
+            raise
 
 
 class OpenAICompatibleRanker:

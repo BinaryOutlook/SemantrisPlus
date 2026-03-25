@@ -67,6 +67,17 @@ app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY") or os.urandom(24)
 
 
+def _env_flag(name: str) -> bool:
+    return os.getenv(name, "0").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _emit_blocks_app_debug_trace(label: str, payload: Any) -> None:
+    if not _env_flag("SEMANTRIS_DEBUG_BLOCKS_LLM"):
+        return
+
+    print(f"[Blocks App Debug] {label}={payload}", flush=True)
+
+
 def load_vocabulary(vocab_file: Path) -> list[str]:
     if not vocab_file.exists():
         raise FileNotFoundError(f"Vocabulary file not found: {vocab_file}")
@@ -733,9 +744,22 @@ def blocks_turn() -> Any:
         for cell, word_index in enumerate(state["grid_indices"])
         if word_index is not None
     ]
+    _emit_blocks_app_debug_trace(
+        "occupied_candidates",
+        [(candidate.candidate_id, candidate.word) for candidate in occupied_candidates],
+    )
 
     primary_choice = RANKER.pick_blocks_primary_candidate(clue, occupied_candidates)
     primary_cell = primary_choice.candidate_id
+    _emit_blocks_app_debug_trace(
+        "primary_choice",
+        {
+            "candidate_id": primary_choice.candidate_id,
+            "provider": primary_choice.provider,
+            "used_fallback": primary_choice.used_fallback,
+            "warning": primary_choice.warning,
+        },
+    )
 
     component_cells = occupied_component_from(
         state["grid_indices"],
@@ -743,11 +767,16 @@ def blocks_turn() -> Any:
         state["grid_width"],
         state["grid_height"],
     )
+    _emit_blocks_app_debug_trace("component_cells", component_cells)
     component_candidates = [
         BlocksCandidate(candidate_id=cell, word=pack.words[state["grid_indices"][cell]])
         for cell in component_cells
         if state["grid_indices"][cell] is not None
     ]
+    _emit_blocks_app_debug_trace(
+        "component_candidates",
+        [(candidate.candidate_id, candidate.word) for candidate in component_candidates],
+    )
     if len(component_candidates) == 1:
         scoring = BlocksCandidateScoringResult(
             scored_candidates=[
@@ -764,6 +793,15 @@ def blocks_turn() -> Any:
         item.candidate_id: item.score
         for item in scoring.scored_candidates
     }
+    _emit_blocks_app_debug_trace(
+        "blocks_scoring_result",
+        {
+            "provider": scoring.provider,
+            "used_fallback": scoring.used_fallback,
+            "warning": scoring.warning,
+            "scores": [(item.candidate_id, item.score) for item in scoring.scored_candidates],
+        },
+    )
 
     turn = resolve_blocks_turn(
         state=state,
