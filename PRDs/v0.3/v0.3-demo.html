@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Semantris Plus v0.3 Demo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet"
+  />
+  <style>
+    :root {
+      color-scheme: light;
+      --font-body: "Manrope", sans-serif;
+      --font-display: "Sora", sans-serif;
+      --bg: #f5f0e8;
+      --bg-muted: #ede5d8;
+      --surface: rgba(255, 251, 244, 0.88);
+      --surface-strong: #fffaf2;
+      --surface-muted: #f2eadf;
+      --line: rgba(24, 28, 31, 0.11);
+      --line-strong: rgba(24, 28, 31, 0.2);
+      --text: #182024;
+      --text-muted: #6d7774;
+      --text-soft: #4f5b58;
+      --accent: #cb5c2b;
+      --accent-strong: #aa471d;
+      --accent-soft: rgba(203, 92, 43, 0.12);
+      --accent-ink: #7a2f14;
+      --focus: rgba(203, 92, 43, 0.16);
+      --playfield: #162128;
+      --playfield-elevated: #1c2a33;
+      --playfield-chip: #24333c;
+      --playfield-chip-soft: #2d4049;
+      --playfield-text: #eef3f0;
+      --playfield-muted: #aab7b2;
+      --clear-zone: rgba(224, 193, 116, 0.2);
+      --clear-zone-line: rgba(224, 193, 116, 0.65);
+      --shadow-sm: 0 16px 30px rgba(30, 23, 14, 0.06);
+      --shadow-md: 0 24px 60px rgba(30, 23, 14, 0.1);
+      --radius-sm: 16px;
+      --radius-md: 24px;
+      --radius-lg: 34px;
+      --max-width: 1380px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      font-family: var(--font-body);
+      background:
+        radial-gradient(circle at top left, rgba(203, 92, 43, 0.08), transparent 25%),
+        radial-gradient(circle at 85% 18%, rgba(203, 92, 43, 0.05), transparent 22%),
+        linear-gradient(180deg, var(--bg) 0%, var(--bg-muted) 100%);
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .page {
+      width: min(calc(100% - 2rem), var(--max-width));
+      margin: 0 auto;
+      padding: 1.5rem 0 4rem;
+    }
+
+    .eyebrow {
+      margin: 0 0 0.65rem;
+      color: var(--text-muted);
+      font-size: 0.74rem;
+      font-weight: 800;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 1.25rem;
+      padding: 1rem 1.2rem;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255, 251, 244, 0.68);
+      backdrop-filter: blur(16px);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.95rem;
+      min-width: 0;
+    }
+
+    .brand-mark {
+      width: 2.85rem;
+      height: 2.85rem;
+      display: grid;
+      place-items: center;
+      border-radius: 1rem;
+      background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+      color: #fff7f2;
+      font-family: var(--font-display);
+      font-size: 1rem;
+      font-weight: 800;
+      box-shadow: 0 14px 28px rgba(170, 71, 29, 0.22);
+    }
+
+    .brand-copy strong,
+    .hero-copy h1,
+    .section-title,
+    .hero-metric__value,
+    .mode-card h3,
+    .summary-card h3 {
+      font-family: var(--font-display);
+    }
+
+    .brand-copy strong {
+      display: block;
+      font-size: 0.98rem;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-copy span {
+      display: block;
+      margin-top: 0.2rem;
+      color: var(--text-muted);
+      font-size: 0.84rem;
+    }
+
+    .topbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .pill,
+    .ghost,
+    .primary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 2.8rem;
+      padding: 0.8rem 1rem;
+      border-radius: 999px;
+      font-weight: 800;
+      transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+    }
+
+    .pill {
+      border: 1px solid rgba(203, 92, 43, 0.18);
+      background: var(--accent-soft);
+      color: var(--accent-ink);
+    }
+
+    .ghost {
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.46);
+      color: var(--text);
+    }
+
+    .primary {
+      border: 1px solid transparent;
+      background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+      color: #fff7f2;
+      box-shadow: 0 16px 34px rgba(170, 71, 29, 0.2);
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(350px, 0.95fr);
+      gap: 1.25rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .hero-copy,
+    .hero-stage,
+    .modes,
+    .preview-shell,
+    .summary-card {
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      background: var(--surface);
+      backdrop-filter: blur(16px);
+      box-shadow: var(--shadow-md);
+    }
+
+    .hero-copy {
+      padding: 2.6rem;
+    }
+
+    .hero-copy h1 {
+      margin: 0;
+      max-width: 11ch;
+      font-size: clamp(2.5rem, 5vw, 4.85rem);
+      line-height: 0.97;
+      letter-spacing: -0.05em;
+    }
+
+    .hero-copy p {
+      max-width: 42rem;
+      color: var(--text-soft);
+      font-size: 1.02rem;
+      line-height: 1.75;
+    }
+
+    .chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.7rem;
+      margin: 1.4rem 0 1.75rem;
+    }
+
+    .chip {
+      padding: 0.62rem 0.85rem;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.48);
+      color: var(--text-soft);
+      font-size: 0.85rem;
+      font-weight: 700;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.8rem;
+    }
+
+    .hero-stage {
+      padding: 1.35rem;
+      display: grid;
+      gap: 1rem;
+      background:
+        linear-gradient(180deg, rgba(255, 251, 244, 0.9), rgba(246, 239, 229, 0.8)),
+        var(--surface);
+    }
+
+    .hero-stage__head,
+    .shell-topbar,
+    .shell-side-card,
+    .tower-stage,
+    .shell-meta,
+    .summary-card {
+      border-radius: var(--radius-md);
+    }
+
+    .hero-stage__head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 1.2rem 1.25rem;
+      background: rgba(255, 255, 255, 0.58);
+      border: 1px solid rgba(24, 28, 31, 0.06);
+    }
+
+    .hero-stage__head strong {
+      display: block;
+      font-size: 1.2rem;
+      font-family: var(--font-display);
+      letter-spacing: -0.03em;
+    }
+
+    .hero-stage__head span {
+      color: var(--text-muted);
+      font-size: 0.88rem;
+      line-height: 1.55;
+    }
+
+    .hero-metrics {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0.75rem;
+    }
+
+    .hero-metric {
+      padding: 1rem;
+      border-radius: 1.2rem;
+      background: rgba(255, 255, 255, 0.64);
+      border: 1px solid rgba(24, 28, 31, 0.06);
+    }
+
+    .hero-metric__label {
+      display: block;
+      color: var(--text-muted);
+      font-size: 0.73rem;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .hero-metric__value {
+      display: block;
+      margin-top: 0.45rem;
+      font-size: 1.35rem;
+      letter-spacing: -0.04em;
+    }
+
+    .modes-and-preview {
+      display: grid;
+      grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.1fr);
+      gap: 1.25rem;
+      align-items: start;
+    }
+
+    .modes {
+      padding: 1.35rem;
+    }
+
+    .section-title {
+      margin: 0;
+      font-size: 1.5rem;
+      letter-spacing: -0.04em;
+    }
+
+    .section-lede {
+      margin: 0.7rem 0 1.2rem;
+      color: var(--text-soft);
+      line-height: 1.7;
+    }
+
+    .mode-list {
+      display: grid;
+      gap: 0.9rem;
+    }
+
+    .mode-card {
+      padding: 1.05rem 1.05rem 1.1rem;
+      border-radius: 1.45rem;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.54);
+    }
+
+    .mode-card--featured {
+      background: linear-gradient(180deg, rgba(203, 92, 43, 0.08), rgba(255, 255, 255, 0.78));
+      border-color: rgba(203, 92, 43, 0.18);
+    }
+
+    .mode-card h3 {
+      margin: 0.2rem 0 0;
+      font-size: 1.15rem;
+      letter-spacing: -0.03em;
+    }
+
+    .mode-card p {
+      margin: 0.55rem 0 0.8rem;
+      color: var(--text-soft);
+      line-height: 1.65;
+    }
+
+    .mode-points {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.55rem;
+    }
+
+    .mode-point {
+      padding: 0.42rem 0.62rem;
+      border-radius: 999px;
+      background: rgba(24, 28, 31, 0.05);
+      color: var(--text-soft);
+      font-size: 0.79rem;
+      font-weight: 700;
+    }
+
+    .preview-shell {
+      padding: 1.35rem;
+      display: grid;
+      gap: 1rem;
+    }
+
+    .shell-topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 1rem 1.15rem;
+      background: rgba(255, 255, 255, 0.58);
+      border: 1px solid rgba(24, 28, 31, 0.06);
+    }
+
+    .shell-topbar strong {
+      display: block;
+      font-family: var(--font-display);
+      letter-spacing: -0.03em;
+    }
+
+    .shell-topbar span {
+      color: var(--text-muted);
+      font-size: 0.84rem;
+    }
+
+    .shell-grid {
+      display: grid;
+      grid-template-columns: 240px minmax(0, 1fr) 280px;
+      gap: 1rem;
+      align-items: stretch;
+    }
+
+    .shell-side-card,
+    .shell-meta {
+      padding: 1rem;
+      background: rgba(255, 255, 255, 0.56);
+      border: 1px solid rgba(24, 28, 31, 0.06);
+    }
+
+    .shell-side-card h4,
+    .shell-meta h4,
+    .summary-card h3 {
+      margin: 0;
+      font-family: var(--font-display);
+      letter-spacing: -0.03em;
+    }
+
+    .shell-side-card p,
+    .shell-meta p,
+    .summary-card p {
+      margin: 0.6rem 0 0;
+      color: var(--text-soft);
+      line-height: 1.65;
+    }
+
+    .rule-pill {
+      display: inline-flex;
+      margin-top: 0.9rem;
+      padding: 0.52rem 0.74rem;
+      border-radius: 999px;
+      background: rgba(203, 92, 43, 0.12);
+      color: var(--accent-ink);
+      font-size: 0.79rem;
+      font-weight: 800;
+    }
+
+    .tower-stage {
+      position: relative;
+      min-height: 40rem;
+      overflow: hidden;
+      padding: 1.35rem;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      background:
+        radial-gradient(circle at top, rgba(255, 255, 255, 0.03), transparent 40%),
+        linear-gradient(180deg, var(--playfield-elevated), var(--playfield));
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    }
+
+    .tower-grid {
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+      background-size: 100% 58px, 64px 100%;
+      opacity: 0.35;
+      pointer-events: none;
+    }
+
+    .tower-stage__head {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .tower-target {
+      padding: 0.9rem 1rem;
+      border-radius: 1.2rem;
+      background: rgba(252, 248, 240, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: var(--playfield-text);
+      backdrop-filter: blur(8px);
+    }
+
+    .tower-target__label,
+    .stack-label,
+    .note-label {
+      display: block;
+      color: var(--playfield-muted);
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .tower-target__word {
+      display: block;
+      margin-top: 0.35rem;
+      font-family: var(--font-display);
+      font-size: 1.35rem;
+      letter-spacing: -0.04em;
+    }
+
+    .tower-provider {
+      color: var(--playfield-muted);
+      font-size: 0.86rem;
+      font-weight: 700;
+    }
+
+    .tower-list {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      gap: 0.62rem;
+      margin-top: 1.4rem;
+    }
+
+    .tower-chip {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 3rem;
+      padding: 0.88rem 1rem;
+      border-radius: 1rem;
+      background: rgba(36, 51, 60, 0.94);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      color: var(--playfield-text);
+      box-shadow: 0 12px 24px rgba(5, 8, 10, 0.18);
+    }
+
+    .tower-chip span {
+      color: var(--playfield-muted);
+      font-size: 0.79rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .tower-chip--target {
+      background: linear-gradient(180deg, rgba(203, 92, 43, 0.28), rgba(203, 92, 43, 0.16));
+      border-color: rgba(236, 165, 134, 0.48);
+    }
+
+    .tower-chip--clear {
+      background: linear-gradient(180deg, rgba(42, 64, 74, 0.98), rgba(35, 51, 60, 0.98));
+      border-color: rgba(224, 193, 116, 0.28);
+    }
+
+    .clear-zone {
+      position: absolute;
+      right: 1.35rem;
+      bottom: 1.3rem;
+      left: 1.35rem;
+      height: 13.55rem;
+      border: 1px dashed var(--clear-zone-line);
+      border-radius: 1.2rem;
+      background: linear-gradient(180deg, transparent, var(--clear-zone));
+      pointer-events: none;
+    }
+
+    .clear-zone__label {
+      position: absolute;
+      top: 0.85rem;
+      right: 1rem;
+      color: rgba(244, 226, 180, 0.88);
+      font-size: 0.74rem;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .command-card {
+      display: grid;
+      gap: 0.9rem;
+    }
+
+    .command-input {
+      min-height: 3.15rem;
+      padding: 0.9rem 1rem;
+      border: 1px solid var(--line);
+      border-radius: 1rem;
+      background: rgba(255, 255, 255, 0.68);
+      color: var(--text);
+      font: inherit;
+    }
+
+    .command-input:focus {
+      outline: none;
+      border-color: rgba(203, 92, 43, 0.32);
+      box-shadow: 0 0 0 5px var(--focus);
+    }
+
+    .status-note {
+      padding: 0.8rem 0.9rem;
+      border-radius: 1rem;
+      background: rgba(203, 92, 43, 0.08);
+      color: var(--accent-ink);
+      font-size: 0.88rem;
+      font-weight: 700;
+      line-height: 1.5;
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.7rem;
+      margin-top: 0.95rem;
+    }
+
+    .meta-item {
+      padding: 0.8rem;
+      border-radius: 1rem;
+      background: rgba(24, 28, 31, 0.04);
+    }
+
+    .meta-item span {
+      display: block;
+      color: var(--text-muted);
+      font-size: 0.74rem;
+      font-weight: 800;
+      letter-spacing: 0.11em;
+      text-transform: uppercase;
+    }
+
+    .meta-item strong {
+      display: block;
+      margin-top: 0.4rem;
+      font-size: 1.02rem;
+      letter-spacing: -0.03em;
+    }
+
+    .summary-card {
+      margin-top: 1.25rem;
+      padding: 1.35rem;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+      gap: 1rem;
+    }
+
+    .summary-points {
+      display: grid;
+      gap: 0.7rem;
+      margin-top: 0.95rem;
+    }
+
+    .summary-point {
+      padding: 0.85rem 0.95rem;
+      border-left: 3px solid rgba(203, 92, 43, 0.35);
+      background: rgba(203, 92, 43, 0.06);
+      border-radius: 0 1rem 1rem 0;
+      color: var(--text-soft);
+      line-height: 1.6;
+    }
+
+    .completion-card {
+      padding: 1rem;
+      border-radius: 1.3rem;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(250, 242, 232, 0.9));
+      border: 1px solid rgba(24, 28, 31, 0.08);
+    }
+
+    .completion-title {
+      margin: 0;
+      font-family: var(--font-display);
+      font-size: 1.2rem;
+      letter-spacing: -0.04em;
+    }
+
+    .completion-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.7rem;
+      margin: 1rem 0;
+    }
+
+    .completion-grid div {
+      padding: 0.78rem;
+      border-radius: 1rem;
+      background: rgba(24, 28, 31, 0.04);
+    }
+
+    .completion-grid span {
+      display: block;
+      color: var(--text-muted);
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.11em;
+      text-transform: uppercase;
+    }
+
+    .completion-grid strong {
+      display: block;
+      margin-top: 0.38rem;
+      font-size: 1rem;
+      letter-spacing: -0.03em;
+    }
+
+    .completion-actions {
+      display: flex;
+      gap: 0.7rem;
+      flex-wrap: wrap;
+    }
+
+    @media (max-width: 1140px) {
+      .hero,
+      .modes-and-preview,
+      .summary-card {
+        grid-template-columns: 1fr;
+      }
+
+      .shell-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .tower-stage {
+        min-height: 34rem;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .page {
+        width: min(calc(100% - 1rem), var(--max-width));
+        padding-top: 1rem;
+      }
+
+      .topbar {
+        border-radius: 1.4rem;
+      }
+
+      .hero-copy,
+      .hero-stage,
+      .modes,
+      .preview-shell,
+      .summary-card {
+        padding-left: 1rem;
+        padding-right: 1rem;
+      }
+
+      .hero-metrics,
+      .completion-grid,
+      .meta-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .hero-copy h1 {
+        max-width: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page" id="top">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">SP</div>
+        <div class="brand-copy">
+          <strong>Semantris Plus</strong>
+          <span>v0.3 design reference / iteration packet demo</span>
+        </div>
+      </div>
+
+      <div class="topbar-actions">
+        <span class="pill">Calm / Sharp / Playful</span>
+        <a class="ghost" href="#preview">Preview shell</a>
+        <a class="primary" href="#summary">Review direction</a>
+      </div>
+    </header>
+
+    <section class="hero">
+      <section class="hero-copy">
+        <p class="eyebrow">v0.3 semantic arcade direction</p>
+        <h1>One clue. Clear hierarchy. Three modes that feel related.</h1>
+        <p>
+          This static demo defines the intended visual direction for the next
+          Semantris Plus pass: a light editorial shell, a darker playfield, mode
+          consistency, and stronger end-of-run feedback without turning the game
+          into a dashboard.
+        </p>
+
+        <div class="chip-row">
+          <span class="chip">Playfield first</span>
+          <span class="chip">Shared shell rhythm</span>
+          <span class="chip">Short-run clarity</span>
+          <span class="chip">No retro HUD</span>
+        </div>
+
+        <div class="hero-actions">
+          <a class="primary" href="#preview">See shared shell</a>
+          <a class="ghost" href="#summary">See acceptance focus</a>
+        </div>
+      </section>
+
+      <section class="hero-stage">
+        <div class="hero-stage__head">
+          <div>
+            <p class="eyebrow">Iteration target</p>
+            <strong>Productized, not overbuilt</strong>
+            <span>
+              Keep the repo small, the UX legible, and the mode boundaries clear.
+            </span>
+          </div>
+          <span class="pill">Static demo only</span>
+        </div>
+
+        <div class="hero-metrics">
+          <article class="hero-metric">
+            <span class="hero-metric__label">Modes</span>
+            <strong class="hero-metric__value">3</strong>
+          </article>
+          <article class="hero-metric">
+            <span class="hero-metric__label">Core mood</span>
+            <strong class="hero-metric__value">Editorial</strong>
+          </article>
+          <article class="hero-metric">
+            <span class="hero-metric__label">Accent</span>
+            <strong class="hero-metric__value">Warm ember</strong>
+          </article>
+        </div>
+      </section>
+    </section>
+
+    <section class="modes-and-preview">
+      <section class="modes">
+        <p class="eyebrow">Mode family</p>
+        <h2 class="section-title">Three loops, one product language</h2>
+        <p class="section-lede">
+          Mode cards should read as one family with different rhythms, not three
+          unrelated experiments.
+        </p>
+
+        <div class="mode-list">
+          <article class="mode-card mode-card--featured">
+            <p class="eyebrow">Core mode</p>
+            <h3>Iteration Mode</h3>
+            <p>
+              The cleanest expression of the product: one target, one clue, one
+              visible path into the clear zone.
+            </p>
+            <div class="mode-points">
+              <span class="mode-point">target-first clarity</span>
+              <span class="mode-point">quick replay</span>
+              <span class="mode-point">semantic cause and effect</span>
+            </div>
+          </article>
+
+          <article class="mode-card">
+            <p class="eyebrow">Pressure variant</p>
+            <h3>Restriction Mode</h3>
+            <p>
+              Same tower family, but the active rule becomes the second tension
+              line instead of adding visual noise.
+            </p>
+            <div class="mode-points">
+              <span class="mode-point">active rule always visible</span>
+              <span class="mode-point">strike logic readable</span>
+              <span class="mode-point">bonus on legal play</span>
+            </div>
+          </article>
+
+          <article class="mode-card">
+            <p class="eyebrow">Grid variant</p>
+            <h3>Blocks Mode</h3>
+            <p>
+              Different mechanic, same product discipline: obvious anchor word,
+              readable chain, satisfying refill.
+            </p>
+            <div class="mode-points">
+              <span class="mode-point">primary hit</span>
+              <span class="mode-point">local scoring</span>
+              <span class="mode-point">gravity and refill</span>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="preview-shell" id="preview">
+        <div class="shell-topbar">
+          <div>
+            <p class="eyebrow">Shared shell preview</p>
+            <strong>Iteration Mode / v0.3</strong>
+            <span>Same hierarchy should scale across all playable pages.</span>
+          </div>
+          <span class="pill">Light shell + dark stage</span>
+        </div>
+
+        <div class="shell-grid">
+          <aside class="shell-side-card">
+            <p class="eyebrow">Run state</p>
+            <h4>Compact, useful, never ceremonial</h4>
+            <p>
+              Progress, turns, vocabulary, and rule state should support the run
+              without competing with the board.
+            </p>
+
+            <div class="meta-grid">
+              <div class="meta-item">
+                <span>Score</span>
+                <strong>118</strong>
+              </div>
+              <div class="meta-item">
+                <span>Elapsed</span>
+                <strong>03:24</strong>
+              </div>
+              <div class="meta-item">
+                <span>Turns</span>
+                <strong>14</strong>
+              </div>
+              <div class="meta-item">
+                <span>Remaining</span>
+                <strong>42</strong>
+              </div>
+            </div>
+
+            <span class="rule-pill">Restriction mode would swap this card for rule + strikes.</span>
+          </aside>
+
+          <section class="tower-stage" aria-label="Semantic tower preview">
+            <div class="tower-grid"></div>
+
+            <div class="tower-stage__head">
+              <div class="tower-target">
+                <span class="tower-target__label">Current target</span>
+                <strong class="tower-target__word">Slipway</strong>
+              </div>
+              <div class="tower-provider">gemini / fallback-safe / live semantic ranking</div>
+            </div>
+
+            <div class="tower-list">
+              <div class="tower-chip">Beacon <span>safe zone</span></div>
+              <div class="tower-chip">Harbor <span>safe zone</span></div>
+              <div class="tower-chip">Wake <span>safe zone</span></div>
+              <div class="tower-chip">Mast <span>safe zone</span></div>
+              <div class="tower-chip">Dry dock <span>safe zone</span></div>
+              <div class="tower-chip tower-chip--target">Slipway <span>target</span></div>
+              <div class="tower-chip tower-chip--clear">Dockline <span>clear zone</span></div>
+              <div class="tower-chip tower-chip--clear">Mooring <span>clear zone</span></div>
+              <div class="tower-chip tower-chip--clear">Hull <span>clear zone</span></div>
+              <div class="tower-chip tower-chip--clear">Pier <span>clear zone</span></div>
+            </div>
+
+            <div class="clear-zone">
+              <div class="clear-zone__label">Clear zone</div>
+            </div>
+          </section>
+
+          <aside class="shell-meta">
+            <p class="eyebrow">Action lane</p>
+            <h4>One action, obvious feedback</h4>
+            <p>
+              The clue composer should feel premium and direct. Status messages
+              should confirm what happened instead of narrating too much.
+            </p>
+
+            <div class="command-card">
+              <input class="command-input" value="shipyard" aria-label="Clue input" />
+              <a class="primary" href="#summary">Send clue</a>
+              <div class="status-note">
+                Target entered the clear zone. Four words removed. New target ready.
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+    </section>
+
+    <section class="summary-card" id="summary">
+      <div>
+        <p class="eyebrow">What this demo is trying to lock in</p>
+        <h3>v0.3 should standardize the product before it expands again.</h3>
+        <p>
+          The next implementation pass should use this design language to tighten
+          product identity, clarify shared shell behavior, and improve replay and
+          completion feedback without flattening the differences between modes.
+        </p>
+
+        <div class="summary-points">
+          <div class="summary-point">
+            Landing, mode selection, and in-game shells should feel like one
+            coherent product family.
+          </div>
+          <div class="summary-point">
+            The board remains the hero. Supporting data should sit at the edges
+            and stay legible without becoming chrome.
+          </div>
+          <div class="summary-point">
+            End-of-run states should feel earned and replay-friendly, not like a
+            placeholder modal dropped on top of the game.
+          </div>
+        </div>
+      </div>
+
+      <aside class="completion-card">
+        <p class="eyebrow">Completion direction</p>
+        <h4 class="completion-title">Run complete / compact summary</h4>
+        <div class="completion-grid">
+          <div>
+            <span>Final score</span>
+            <strong>286</strong>
+          </div>
+          <div>
+            <span>Total time</span>
+            <strong>08:42</strong>
+          </div>
+          <div>
+            <span>Turns</span>
+            <strong>31</strong>
+          </div>
+          <div>
+            <span>Pack</span>
+            <strong>aviation_1</strong>
+          </div>
+        </div>
+
+        <p>
+          Completion should summarize the run clearly and then invite the next
+          replay without making the player hunt for the action.
+        </p>
+
+        <div class="completion-actions">
+          <a class="primary" href="#preview">Play again</a>
+          <a class="ghost" href="#top">Switch mode</a>
+        </div>
+      </aside>
+    </section>
+  </main>
+</body>
+</html>
