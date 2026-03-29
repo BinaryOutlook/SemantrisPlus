@@ -26,7 +26,7 @@ This is intentionally both a game project and a software-structure project.
 
 ## Current Modes
 
-The game now ships with three playable modes:
+The game now ships with three playable modes, Version Code "0.3" :
 
 ### Iteration Mode
 
@@ -187,6 +187,7 @@ SemantrisPlus/
 │   ├── lite_1.txt
 │   └── restriction_rules.json
 ├── docs/
+│   ├── PRD.md             # Foundation product requirements document
 │   ├── V0.1.md            # Structural cleanup release note
 │   ├── V0.2.md            # Frontend TypeScript migration note
 │   ├── 2newmodes.md       # Mode design notes
@@ -347,6 +348,7 @@ python3 -m unittest discover -s tests
 
 ### Supporting documents
 
+- `docs/PRD.md`: stable product direction, scope, and engineering guardrails
 - `brief.md`: product brief for future contractors
 - `docs/V0.1.md`: implementation note for the structural cleanup release
 - `docs/V0.2.md`: implementation note for the frontend TypeScript migration
@@ -369,7 +371,7 @@ This repo is aiming for a small but professional standard:
 - the fallback ranker is much weaker than Gemini
 - animation quality is improved but still not at final production polish
 - there is no persistent profile, save system, or leaderboard yet
-- the current game mode is only the first structured version of the larger idea
+- the current set of modes is still an early structured version of the larger idea
 
 ## Roadmap
 
@@ -379,7 +381,7 @@ Near-term priorities:
 - strengthen visual polish and motion design
 - add richer difficulty and session options
 - improve fallback ranking quality
-- evaluate whether `gemini-2.5-flash` feels better than `gemini-2.5-flash-lite` for ranking quality
+- evaluate whether `gemini-3.1-flash-lite` feels better than `gemini-2.5-flash-lite` for ranking quality
 
 Longer-term ideas:
 
@@ -401,7 +403,7 @@ Pull requests and experiments are welcome across:
 - vocabulary packs
 - tests and documentation
 
-If you are extending the codebase structurally, start with `brief.md`, `docs/V0.1.md`, and `docs/V0.2.md` so the architecture direction stays consistent.
+If you are extending the codebase structurally, start with `docs/PRD.md`, `brief.md`, `docs/V0.1.md`, and `docs/V0.2.md` so the product and architecture direction stay consistent.
 
 ## Notes
 
