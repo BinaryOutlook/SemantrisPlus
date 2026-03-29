@@ -186,6 +186,11 @@ SemantrisPlus/
 │   ├── general_1.txt
 │   ├── lite_1.txt
 │   └── restriction_rules.json
+├── PRDs/
+│   ├── README.md          # Versioned iteration workflow
+│   └── v0.3/
+│       ├── v0.3.md        # Current version-scoped PRD packet
+│       └── v0.3-demo.html # Static design demo for the iteration
 ├── docs/
 │   ├── PRD.md             # Foundation product requirements document
 │   ├── V0.1.md            # Structural cleanup release note
@@ -348,6 +353,9 @@ python3 -m unittest discover -s tests
 
 ### Supporting documents
 
+- `PRDs/README.md`: repeatable version-folder workflow for major iterations
+- `PRDs/v0.3/v0.3.md`: current version-scoped iteration PRD
+- `PRDs/v0.3/v0.3-demo.html`: static visual reference for the `v0.3` pass
 - `docs/PRD.md`: stable product direction, scope, and engineering guardrails
 - `brief.md`: product brief for future contractors
 - `docs/V0.1.md`: implementation note for the structural cleanup release
