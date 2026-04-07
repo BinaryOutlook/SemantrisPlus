@@ -20,10 +20,11 @@ This document is intentionally product-first. It should stay valid across many i
 
 It does not replace:
 
+- `docs/README.md` for the documentation map
 - `README.md` for setup and repo overview
-- `brief.md` for contractor-style orientation
-- `docs/V*.md` for historical release notes
-- technical design notes or ADRs for implementation decisions
+- `docs/briefs/project-brief.md` for contractor-style orientation
+- `docs/history/releases/` for completed milestone notes
+- `docs/decisions/` and `docs/proposals/` for implementation decisions and planning briefs
 
 ## 2. Product Summary
 
@@ -262,11 +263,12 @@ This section is the anti-spaghetti contract for the project.
 
 ### 11.5 Keep documentation layered
 
+- `docs/README.md` explains how the documentation is organized.
 - `README.md` explains what the repo is and how to run it.
 - `docs/PRD.md` explains what the product is trying to become in this phase.
-- `brief.md` helps future helpers re-enter the project quickly.
-- `docs/V*.md` explain why specific milestones happened.
-- New architecture decisions that shape future work should be written down as ADR-style notes instead of living only in commits or memory.
+- `docs/briefs/project-brief.md` helps future helpers re-enter the project quickly.
+- `docs/history/releases/` explains why specific milestones happened.
+- New architecture decisions that shape future work should be written down under `docs/decisions/` instead of living only in commits or memory.
 
 ### 11.6 Prefer small, test-backed changes
 

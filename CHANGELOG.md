@@ -8,7 +8,11 @@ The format is inspired by Keep a Changelog, adapted for this repo's pace and sco
 
 ## [Unreleased]
 
-- No unreleased entries yet.
+### Changed
+
+- Reorganized project documentation into purpose-based folders under `docs/` so briefs, decisions, proposals, and release notes no longer sit as dangling Markdown files.
+- Moved the Cupertino source-reference packet under `PRDs/references/` so canonical iteration folders stay separate from reference-only material.
+- Added [`docs/README.md`](/Users/leoliang/StudyMain/SemantrisPlus/docs/README.md) as the documentation map for future contributors.
 
 ## [0.2.3] - 2026-03-24
 
@@ -36,7 +40,7 @@ The format is inspired by Keep a Changelog, adapted for this repo's pace and sco
 - Added a TypeScript frontend source tree under `frontend/src/`.
 - Added a frontend build and validation toolchain with `package.json`, `tsconfig.json`, `esbuild`, and Vitest.
 - Added frontend-oriented tests for utility logic and DOM binding behavior.
-- Added [`docs/V0.2.md`](/Users/leoliang/StudyMain/SemantrisPlus/docs/V0.2.md) to document the frontend migration and the new development workflow.
+- Added [`docs/history/releases/v0.2-typescript-frontend-migration.md`](/Users/leoliang/StudyMain/SemantrisPlus/docs/history/releases/v0.2-typescript-frontend-migration.md) to document the frontend migration and the new development workflow.
 
 ### Changed
 
@@ -72,7 +76,7 @@ The format is inspired by Keep a Changelog, adapted for this repo's pace and sco
 - Established the first maintainable project baseline for Semantris Plus.
 - Added dedicated frontend asset files with `static/css/app.css` and `static/js/game.js` instead of keeping the whole frontend inside one template.
 - Added automated tests for core gameplay behavior and API responses.
-- Added stronger project documentation with `README.md`, `brief.md`, and [`docs/V0.1.md`](/Users/leoliang/StudyMain/SemantrisPlus/docs/V0.1.md).
+- Added stronger project documentation with `README.md`, `docs/briefs/project-brief.md`, and [`docs/history/releases/v0.1-structural-cleanup.md`](/Users/leoliang/StudyMain/SemantrisPlus/docs/history/releases/v0.1-structural-cleanup.md).
 
 ### Changed
 

@@ -120,7 +120,7 @@ This repo supports two remote ranking modes: Gemini through Google’s Gen AI SD
 
 Current status: `v0.3.1` active prototype with a modular Flask backend, a typed frontend client, OpenAI/Gemini-compatible ranking, and a three-theme UI system with manual light, dark, and Cupertino switching.
 
-The current frontend iteration packet is `PRDs/v0.3.1/`, which documents the Cupertino theme pass and its source references in `PRDs/v0.3.1_Frontend_Cupertino_Mode/`.
+The current frontend iteration packet is `PRDs/v0.3.1/`, which documents the Cupertino theme pass and its source references in `PRDs/references/v0.3.1-cupertino-source-packet/`.
 
 What is already in place:
 
@@ -177,8 +177,7 @@ SemantrisPlus/
 ├── game_logic_restriction.py # Restriction-mode rules, strikes, and rule rotation
 ├── game_logic_blocks.py   # Blocks-mode grid, gravity, and chain resolution
 ├── llm_client.py          # Provider integration, validation, and fallback ranking
-├── brief.md               # Contractor-facing project brief and roadmap
-├── GeminiMoving.md        # Migration evaluation and decision record
+├── CHANGELOG.md           # Curated notable changes
 ├── README.md              # Project overview and setup
 ├── requirements.txt       # Python dependencies
 ├── .env.example           # Environment variable template
@@ -190,23 +189,36 @@ SemantrisPlus/
 │   └── restriction_rules.json
 ├── PRDs/
 │   ├── README.md          # Versioned iteration workflow
+│   ├── references/
+│   │   └── v0.3.1-cupertino-source-packet/
+│   │       ├── DESIGN.md  # Imported Apple-inspired source design notes
+│   │       ├── README.md  # Source packet overview
+│   │       ├── preview.html
+│   │       └── preview-dark.html
 │   ├── v0.3/
 │   │   ├── v0.3.md        # Initial version-scoped PRD packet
 │   │   └── v0.3-demo.html # Static design demo for the iteration
 │   ├── v0.3.1/
 │   │   ├── v0.3.1.md      # Cupertino frontend iteration PRD
 │   │   └── v0.3.1-demo.html # Cupertino design target for implementation
-│   └── v0.3.1_Frontend_Cupertino_Mode/
-│       ├── DESIGN.md      # Imported Apple-inspired source design notes
-│       ├── README.md      # Source packet overview
-│       ├── preview.html   # Reference token preview
-│       └── preview-dark.html # Dark reference preview
 ├── docs/
+│   ├── README.md          # Documentation map and placement rules
 │   ├── PRD.md             # Foundation product requirements document
-│   ├── V0.1.md            # Structural cleanup release note
-│   ├── V0.2.md            # Frontend TypeScript migration note
-│   ├── 2newmodes.md       # Mode design notes
-│   └── 2newmodes_technical.md # Implementation brief for the new modes
+│   ├── briefs/
+│   │   └── project-brief.md # Contractor-facing orientation brief
+│   ├── decisions/
+│   │   ├── gemini-sdk-migration.md
+│   │   └── llm-provider-diversification.md
+│   ├── history/
+│   │   └── releases/
+│   │       ├── v0.1-structural-cleanup.md
+│   │       ├── v0.1.2-frontend-enhancement.md
+│   │       └── v0.2-typescript-frontend-migration.md
+│   └── proposals/
+│       ├── frontend-typescript-rewrite-assessment.md
+│       └── modes/
+│           ├── blocks-and-restriction-concept.md
+│           └── blocks-and-restriction-technical-brief.md
 ├── frontend/
 │   └── src/               # TypeScript source for all interactive game clients
 ├── package.json           # Frontend scripts and dependencies
@@ -363,13 +375,15 @@ python3 -m unittest discover -s tests
 
 ### Supporting documents
 
+- `docs/README.md`: documentation map and rules for where new Markdown files belong
 - `PRDs/README.md`: repeatable version-folder workflow for major iterations
-- `PRDs: Folder for all PRD, v0.3.1 is the latest
+- `PRDs/v0.3.1/`: current canonical iteration packet
 - `docs/PRD.md`: stable product direction, scope, and engineering guardrails
-- `brief.md`: product brief for future contractors
-- `docs/V0.1.md`: implementation note for the structural cleanup release
-- `docs/V0.2.md`: implementation note for the frontend TypeScript migration
-- `GeminiMoving.md`: migration evaluation and recommendation memo
+- `docs/briefs/project-brief.md`: product brief for future contractors
+- `docs/history/releases/v0.1-structural-cleanup.md`: implementation note for the structural cleanup release
+- `docs/history/releases/v0.2-typescript-frontend-migration.md`: implementation note for the frontend TypeScript migration
+- `docs/decisions/gemini-sdk-migration.md`: Gemini client migration evaluation and recommendation memo
+- `docs/decisions/llm-provider-diversification.md`: provider-selection decision brief
 
 ### Code quality goals
 
@@ -420,7 +434,7 @@ Pull requests and experiments are welcome across:
 - vocabulary packs
 - tests and documentation
 
-If you are extending the codebase structurally, start with `docs/PRD.md`, `brief.md`, `docs/V0.1.md`, and `docs/V0.2.md` so the product and architecture direction stay consistent.
+If you are extending the codebase structurally, start with `docs/README.md`, `docs/PRD.md`, `docs/briefs/project-brief.md`, and the relevant release notes under `docs/history/releases/` so the product and architecture direction stay consistent.
 
 ## Notes
 

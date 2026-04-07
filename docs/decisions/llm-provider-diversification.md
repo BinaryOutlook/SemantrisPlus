@@ -2,7 +2,7 @@
 
 Date: 2026-03-24
 
-Status: proposed, not yet implemented in the repository.
+Status: implemented in the repository; retained as the decision brief for the current provider-selection model.
 
 ## Executive Summary
 

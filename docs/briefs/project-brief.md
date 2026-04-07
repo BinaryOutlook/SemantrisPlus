@@ -6,7 +6,7 @@ This project is a modern rebuild of the original Semantris arcade idea using con
 
 This brief is written to help future AI contractors work from a shared implementation contract instead of re-discovering the repo from scratch.
 
-Status note: this brief now sits alongside a more current implementation snapshot in `README.md`, `docs/V0.1.md`, and `GeminiMoving.md`. Where this brief discusses future direction, those documents describe the current migrated baseline.
+Status note: this brief now sits alongside a more current implementation snapshot in `README.md`, `docs/history/releases/v0.1-structural-cleanup.md`, and `docs/decisions/gemini-sdk-migration.md`. Where this brief discusses future direction, those documents describe the current migrated baseline.
 
 ## 2. Current Repository Snapshot
 
@@ -21,8 +21,8 @@ Status note: this brief now sits alongside a more current implementation snapsho
 - `assets/*.txt`: Vocabulary packs with varying sizes.
 - `testing/api_latency.py`: Ad hoc latency script for provider comparison.
 - `README.md`: primary project overview and setup guide.
-- `docs/V0.1.md`: implementation note for the structural refresh.
-- `GeminiMoving.md`: migration evaluation and decision memo.
+- `docs/history/releases/v0.1-structural-cleanup.md`: implementation note for the structural refresh.
+- `docs/decisions/gemini-sdk-migration.md`: migration evaluation and decision memo.
 - `requirements.txt`: Python dependencies.
 
 ### Architectural reality today
@@ -319,7 +319,7 @@ Add pure Python tests for:
 The documentation set should include:
 
 - updated `README.md`
-- this `brief.md`
+- this brief in `docs/briefs/project-brief.md`
 - clearer environment setup instructions
 - vocabulary pack notes
 - known limitations
