@@ -94,7 +94,6 @@ These are the most natural additions if the current stack stays largely intact.
 | Lower cost and faster turns | Redis result cache | Augment | Easiest operational win if clue and board combinations repeat or partially repeat |
 | Better pre-ranking | Local embeddings with `sentence-transformers` + FAISS / Qdrant / `pgvector` | Augment | Strong fit if the game needs cheaper and more stable semantic ordering before LLM refinement |
 | Stronger fallback quality | Embedding-based fallback or BM25 / RapidFuzz hybrid fallback | Augment or replace fallback | Better long-term option than relying only on a simple heuristic fallback |
-| Self-hosted or local models | Ollama / vLLM / LM Studio behind an OpenAI-compatible endpoint | Replace remote provider or augment provider options | Attractive because the existing OpenAI-compatible path already lowers integration cost |
 | Better semantic reranking | Cross-encoder reranker on top of embeddings | Augment | Higher quality, but more compute-heavy and more complex to tune |
 | Full orchestration framework | LangChain or LlamaIndex | Usually avoid for now | The current prompt flow is simple enough that these would likely add more abstraction than value |
 
