@@ -14,7 +14,7 @@
         storedTheme = null;
       }
 
-      var theme = storedTheme === "light" || storedTheme === "dark"
+      var theme = storedTheme === "light" || storedTheme === "dark" || storedTheme === "cupertino"
         ? storedTheme
         : (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
 
@@ -74,6 +74,14 @@
             aria-pressed="false"
           >
             Dark
+          </button>
+          <button
+            type="button"
+            class="theme-toggle__button"
+            data-theme-option="cupertino"
+            aria-pressed="false"
+          >
+            Cupertino
           </button>
         </div>
         <button id="new-game-button" class="command-button command-button--compact" type="button">

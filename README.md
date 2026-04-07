@@ -26,7 +26,7 @@ This is intentionally both a game project and a software-structure project.
 
 ## Current Modes
 
-The game now ships with three playable modes, Version Code "0.3" :
+The game now ships with three playable modes, Version Code "0.3.1" :
 
 ### Iteration Mode
 
@@ -118,9 +118,9 @@ This repo supports two remote ranking modes: Gemini through Google’s Gen AI SD
 
 ## Project Status
 
-Current status: `v0.2.4` active prototype with a modular Flask backend, a typed frontend client, openai - Gemini Dual Capatable and a dual-theme UI system with manual light/dark switching. 
+Current status: `v0.3.1` active prototype with a modular Flask backend, a typed frontend client, OpenAI/Gemini-compatible ranking, and a three-theme UI system with manual light, dark, and Cupertino switching.
 
-The current frontend planning packet is `PRDs/v0.3.1/`, which scopes an opt-in Cupertino theme pass using the source references stored in `PRDs/v0.3.1_Frontend_Cupertino_Mode/`.
+The current frontend iteration packet is `PRDs/v0.3.1/`, which documents the Cupertino theme pass and its source references in `PRDs/v0.3.1_Frontend_Cupertino_Mode/`.
 
 What is already in place:
 
@@ -130,8 +130,8 @@ What is already in place:
 - no-repeat word handling until the unseen pool is exhausted
 - improved tower presentation and animation sequencing
 - a TypeScript frontend source tree compiled into a browser bundle
-- a shared theme controller with manual light/dark mode switching across the landing page and the game
-- a polished light mode plus a flatter, surface-led dark mode tuned for the playfield
+- a shared theme controller with manual light/dark/Cupertino switching across the landing page and the game
+- a polished light mode, a flatter surface-led dark mode, and a Cupertino theme with a more restrained product-style shell
 - frontend type-checking and Vitest coverage for key browser-side logic
 - fallback ranking path for resilience
 - automated tests for gameplay rules, API behavior, and provider fallback behavior
@@ -166,7 +166,7 @@ This repository is now structured around clear responsibilities instead of mixin
 - The interactive frontend now lives in dedicated TypeScript modules compiled into served browser bundles.
 - Session state is explicit so the frontend can render the game from stable API payloads.
 - The frontend build and validation steps are small but formalized so browser code can evolve safely.
-- Theme state is handled in the frontend so both pages stay visually consistent while still respecting system preference by default.
+- Theme state is handled in the frontend so all pages stay visually consistent while still respecting system light/dark preference by default.
 
 ## Repository Structure
 
@@ -268,7 +268,7 @@ python3 app.py
 
 Open [http://127.0.0.1:5001](http://127.0.0.1:5001), then launch `Iteration Mode` from the landing page.
 
-Light and dark mode are both available. The UI will follow the system theme by default, and the top-right toggle on the landing page and game page lets you override it manually.
+Light, dark, and Cupertino modes are available. The UI follows the system light/dark preference by default, and the top-right toggle on the landing page and each game page lets you override it manually.
 
 ### 4. Rebuild the frontend after TypeScript changes
 
@@ -364,8 +364,7 @@ python3 -m unittest discover -s tests
 ### Supporting documents
 
 - `PRDs/README.md`: repeatable version-folder workflow for major iterations
-- `PRDs/v0.3/v0.3.md`: current version-scoped iteration PRD
-- `PRDs/v0.3/v0.3-demo.html`: static visual reference for the `v0.3` pass
+- `PRDs: Folder for all PRD, v0.3.1 is the latest
 - `docs/PRD.md`: stable product direction, scope, and engineering guardrails
 - `brief.md`: product brief for future contractors
 - `docs/V0.1.md`: implementation note for the structural cleanup release

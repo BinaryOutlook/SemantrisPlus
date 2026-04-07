@@ -41,6 +41,7 @@ function renderThemeControls(): void {
     <div class="theme-toggle" role="group" aria-label="Color theme">
       <button type="button" data-theme-option="light"></button>
       <button type="button" data-theme-option="dark"></button>
+      <button type="button" data-theme-option="cupertino"></button>
     </div>
   `;
 }
@@ -65,11 +66,31 @@ describe("initThemeControls", () => {
     installMatchMedia(false);
 
     initThemeControls(document, window);
-    const darkButton = document.querySelector<HTMLButtonElement>('[data-theme-option="dark"]');
-    darkButton?.click();
+    const cupertinoButton = document.querySelector<HTMLButtonElement>(
+      '[data-theme-option="cupertino"]',
+    );
+    cupertinoButton?.click();
 
-    expect(window.localStorage.getItem("semantris-theme")).toBe("dark");
-    expect(document.documentElement.dataset.theme).toBe("dark");
-    expect(darkButton?.classList.contains("is-active")).toBe(true);
+    expect(window.localStorage.getItem("semantris-theme")).toBe("cupertino");
+    expect(document.documentElement.dataset.theme).toBe("cupertino");
+    expect(cupertinoButton?.classList.contains("is-active")).toBe(true);
+  });
+
+  it("uses a stored cupertino preference instead of the system theme", () => {
+    installMatchMedia(true);
+    window.localStorage.setItem("semantris-theme", "cupertino");
+
+    initThemeControls(document, window);
+
+    expect(document.documentElement.dataset.theme).toBe("cupertino");
+  });
+
+  it("ignores invalid stored values and falls back to the system theme", () => {
+    installMatchMedia(false);
+    window.localStorage.setItem("semantris-theme", "sepia");
+
+    initThemeControls(document, window);
+
+    expect(document.documentElement.dataset.theme).toBe("light");
   });
 });

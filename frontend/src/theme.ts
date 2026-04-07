@@ -1,6 +1,12 @@
 const STORAGE_KEY = "semantris-theme";
 
-type ThemeOption = "light" | "dark";
+const THEME_OPTIONS = ["light", "dark", "cupertino"] as const;
+
+type ThemeOption = (typeof THEME_OPTIONS)[number];
+
+function isThemeOption(value: string | null): value is ThemeOption {
+  return value !== null && THEME_OPTIONS.includes(value as ThemeOption);
+}
 
 function getSystemTheme(windowRef: Window = window): ThemeOption {
   return windowRef.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
@@ -9,7 +15,7 @@ function getSystemTheme(windowRef: Window = window): ThemeOption {
 function getStoredTheme(windowRef: Window = window): ThemeOption | null {
   try {
     const value = windowRef.localStorage.getItem(STORAGE_KEY);
-    return value === "light" || value === "dark" ? value : null;
+    return isThemeOption(value) ? value : null;
   } catch {
     return null;
   }
@@ -60,8 +66,8 @@ export function initThemeControls(
 
   buttons.forEach((button) => {
     button.addEventListener("click", () => {
-      const theme = button.dataset.themeOption;
-      if (theme !== "light" && theme !== "dark") {
+      const theme = button.dataset.themeOption ?? null;
+      if (!isThemeOption(theme)) {
         return;
       }
 

@@ -2,7 +2,7 @@
 
 Status: Active foundation document
 Owner: BinaryOutlook
-Last updated: 2026-03-30
+Last updated: 2026-04-07
 Project phase: Solo-built prototype moving toward a maintainable small product
 
 ## 1. Purpose
@@ -124,7 +124,7 @@ The product currently supports:
 - session-based run state
 - Gemini or OpenAI-compatible provider selection through environment configuration
 - deterministic local fallback behavior when remote ranking fails
-- light and dark themes with manual override
+- light, dark, and Cupertino themes with manual override
 - automated backend and frontend tests
 
 ### 8.2 Iteration Mode
