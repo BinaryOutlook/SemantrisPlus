@@ -23,9 +23,15 @@ PRDs/
 3. Point the coding agent at the version folder so it can read both the PRD and the demo together.
 4. After implementation, append a short change log to the bottom of the version PRD.
 
-## Current active planning folder
+Reference folders may also exist for imported inspiration material or rough source assets, but the canonical iteration packet should still live under the versioned `vX.Y/` path.
 
-- `PRDs/v0.3/`
+## Current active planning folders
+
+- `PRDs/v0.3.1/`
+
+## Reference-only source folder
+
+- `PRDs/v0.3.1_Frontend_Cupertino_Mode/` contains the imported Cupertino source materials used to draft the `v0.3.1` packet. It is a reference folder, not the canonical iteration packet.
 
 The stable product-wide foundation still lives in `docs/PRD.md`.
 This `PRDs/` folder is for version-scoped iteration work.

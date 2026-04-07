@@ -120,6 +120,8 @@ This repo supports two remote ranking modes: Gemini through Google’s Gen AI SD
 
 Current status: `v0.2.4` active prototype with a modular Flask backend, a typed frontend client, openai - Gemini Dual Capatable and a dual-theme UI system with manual light/dark switching. 
 
+The current frontend planning packet is `PRDs/v0.3.1/`, which scopes an opt-in Cupertino theme pass using the source references stored in `PRDs/v0.3.1_Frontend_Cupertino_Mode/`.
+
 What is already in place:
 
 - modularized gameplay logic instead of one monolithic server file
@@ -188,9 +190,17 @@ SemantrisPlus/
 │   └── restriction_rules.json
 ├── PRDs/
 │   ├── README.md          # Versioned iteration workflow
-│   └── v0.3/
-│       ├── v0.3.md        # Current version-scoped PRD packet
-│       └── v0.3-demo.html # Static design demo for the iteration
+│   ├── v0.3/
+│   │   ├── v0.3.md        # Initial version-scoped PRD packet
+│   │   └── v0.3-demo.html # Static design demo for the iteration
+│   ├── v0.3.1/
+│   │   ├── v0.3.1.md      # Cupertino frontend iteration PRD
+│   │   └── v0.3.1-demo.html # Cupertino design target for implementation
+│   └── v0.3.1_Frontend_Cupertino_Mode/
+│       ├── DESIGN.md      # Imported Apple-inspired source design notes
+│       ├── README.md      # Source packet overview
+│       ├── preview.html   # Reference token preview
+│       └── preview-dark.html # Dark reference preview
 ├── docs/
 │   ├── PRD.md             # Foundation product requirements document
 │   ├── V0.1.md            # Structural cleanup release note
