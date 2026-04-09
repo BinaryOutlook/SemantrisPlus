@@ -51,38 +51,93 @@ class FakeGeminiClient:
 
 
 class FakeOpenAIMessage:
-    def __init__(self, content):
+    def __init__(self, content, reasoning_content=None):
         self.content = content
+        self.reasoning_content = reasoning_content
 
 
 class FakeOpenAIChoice:
-    def __init__(self, message: FakeOpenAIMessage):
+    def __init__(self, message: FakeOpenAIMessage, finish_reason: str = "stop"):
         self.message = message
+        self.finish_reason = finish_reason
 
 
 class FakeOpenAICompletion:
-    def __init__(self, content):
-        self.choices = [FakeOpenAIChoice(FakeOpenAIMessage(content))]
+    def __init__(self, content, *, reasoning_content=None, finish_reason: str = "stop"):
+        self.choices = [
+            FakeOpenAIChoice(
+                FakeOpenAIMessage(content, reasoning_content=reasoning_content),
+                finish_reason=finish_reason,
+            )
+        ]
+
+    def model_dump(self) -> dict:
+        return {
+            "choices": [
+                {
+                    "finish_reason": self.choices[0].finish_reason,
+                    "message": {
+                        "content": self.choices[0].message.content,
+                        "reasoning_content": self.choices[0].message.reasoning_content,
+                    }
+                }
+            ]
+        }
 
 
 class FakeOpenAICompletions:
-    def __init__(self, response: FakeOpenAICompletion):
+    def __init__(self, response: FakeOpenAICompletion, stream_response=None):
         self.response = response
+        self.stream_response = stream_response
         self.calls = []
 
     def create(self, **kwargs):
         self.calls.append(kwargs)
+        if kwargs.get("stream"):
+            if self.stream_response is None:
+                raise AssertionError("Missing fake stream response")
+            return self.stream_response
         return self.response
 
 
 class FakeOpenAIChat:
-    def __init__(self, response: FakeOpenAICompletion):
-        self.completions = FakeOpenAICompletions(response)
+    def __init__(self, response: FakeOpenAICompletion, stream_response=None):
+        self.completions = FakeOpenAICompletions(response, stream_response=stream_response)
 
 
 class FakeOpenAIClient:
-    def __init__(self, response: FakeOpenAICompletion):
-        self.chat = FakeOpenAIChat(response)
+    def __init__(self, response: FakeOpenAICompletion, stream_response=None):
+        self.chat = FakeOpenAIChat(response, stream_response=stream_response)
+
+
+class FakeOpenAIChunkDelta:
+    def __init__(self, content=None, reasoning_content=None):
+        self.content = content
+        self.reasoning_content = reasoning_content
+
+
+class FakeOpenAIChunkChoice:
+    def __init__(self, delta: FakeOpenAIChunkDelta, finish_reason: str | None = None):
+        self.delta = delta
+        self.finish_reason = finish_reason
+
+
+class FakeOpenAIChunk:
+    def __init__(self, content=None, *, reasoning_content=None, finish_reason: str | None = None):
+        self.choices = [FakeOpenAIChunkChoice(FakeOpenAIChunkDelta(content, reasoning_content), finish_reason)]
+
+    def model_dump(self) -> dict:
+        return {
+            "choices": [
+                {
+                    "delta": {
+                        "content": self.choices[0].delta.content,
+                        "reasoning_content": self.choices[0].delta.reasoning_content,
+                    },
+                    "finish_reason": self.choices[0].finish_reason,
+                }
+            ]
+        }
 
 
 class FakeAPIStatusError(Exception):
@@ -278,6 +333,88 @@ class LLMClientTests(unittest.TestCase):
 
     def test_openai_ranker_rejects_empty_content(self) -> None:
         response = FakeOpenAICompletion("")
+        stream_response = [FakeOpenAIChunk(None, finish_reason="stop")]
+        ranker = OpenAICompatibleRanker(
+            api_key="test-key",
+            base_url="https://example.com/v1",
+            model_name="gpt-5.2-mini",
+            client=FakeOpenAIClient(response, stream_response=stream_response),
+        )
+
+        with self.assertRaises(RankingError):
+            ranker.rank_words("boat", ["Anchor", "Harbor", "Orbit"])
+
+    def test_openai_ranker_rejects_reasoning_only_response_that_hits_length_limit(self) -> None:
+        response = FakeOpenAICompletion(
+            "",
+            reasoning_content="Thinking Process: rank the words...",
+            finish_reason="length",
+        )
+        stream_response = [
+            FakeOpenAIChunk(None, reasoning_content="Thinking Process: rank the words..."),
+            FakeOpenAIChunk(None, finish_reason="length"),
+        ]
+        ranker = OpenAICompatibleRanker(
+            api_key="test-key",
+            base_url="https://example.com/v1",
+            model_name="gpt-5.2-mini",
+            client=FakeOpenAIClient(response, stream_response=stream_response),
+        )
+
+        with self.assertRaises(RankingError) as context:
+            ranker.rank_words("boat", ["Anchor", "Harbor", "Orbit"])
+
+        self.assertIn("reasoning_content was present", str(context.exception))
+        self.assertIn("max token limit", str(context.exception))
+
+    def test_openai_ranker_falls_back_to_streaming_when_non_stream_content_is_empty(self) -> None:
+        response = FakeOpenAICompletion(None)
+        stream_response = [
+            FakeOpenAIChunk("Anchor\n"),
+            FakeOpenAIChunk("Orbit\nHarbor"),
+            FakeOpenAIChunk(None, finish_reason="stop"),
+        ]
+        client = FakeOpenAIClient(response, stream_response=stream_response)
+        ranker = OpenAICompatibleRanker(
+            api_key="test-key",
+            base_url="https://example.com/v1",
+            model_name="gpt-5.2-mini",
+            client=client,
+        )
+
+        ranked = ranker.rank_words("boat", ["Anchor", "Harbor", "Orbit"])
+
+        self.assertEqual(ranked, ["Anchor", "Orbit", "Harbor"])
+        self.assertEqual(len(client.chat.completions.calls), 2)
+        self.assertFalse(client.chat.completions.calls[0].get("stream", False))
+        self.assertTrue(client.chat.completions.calls[1]["stream"])
+
+    def test_openai_ranker_emits_debug_trace_when_response_is_empty(self) -> None:
+        response = FakeOpenAICompletion(None)
+        stream_response = [FakeOpenAIChunk(None, finish_reason="stop")]
+        ranker = OpenAICompatibleRanker(
+            api_key="test-key",
+            base_url="https://example.com/v1",
+            model_name="gpt-5.2-mini",
+            client=FakeOpenAIClient(response, stream_response=stream_response),
+        )
+
+        with patch("builtins.print") as patched_print:
+            with self.assertRaises(RankingError):
+                ranker.rank_words("boat", ["Anchor", "Harbor", "Orbit"])
+
+        printed = "\n".join(
+            " ".join(str(arg) for arg in call.args) for call in patched_print.call_args_list
+        )
+        self.assertIn("[OpenAI LLM Debug] stage=ranking model=gpt-5.2-mini", printed)
+        self.assertIn("[OpenAI LLM Debug] response_payload_begin", printed)
+        self.assertIn('"content": null', printed)
+        self.assertIn("[OpenAI LLM Debug] extracted_text_begin", printed)
+        self.assertIn("<empty>", printed)
+        self.assertIn("validation_error=RankingError: Model returned an empty response.", printed)
+
+    def test_openai_ranker_emits_debug_trace_when_response_text_fails_validation(self) -> None:
+        response = FakeOpenAICompletion("not valid ranking output")
         ranker = OpenAICompatibleRanker(
             api_key="test-key",
             base_url="https://example.com/v1",
@@ -285,8 +422,16 @@ class LLMClientTests(unittest.TestCase):
             client=FakeOpenAIClient(response),
         )
 
-        with self.assertRaises(RankingError):
-            ranker.rank_words("boat", ["Anchor", "Harbor", "Orbit"])
+        with patch("builtins.print") as patched_print:
+            with self.assertRaises(RankingError):
+                ranker.rank_words("boat", ["Anchor", "Harbor", "Orbit"])
+
+        printed = "\n".join(
+            " ".join(str(arg) for arg in call.args) for call in patched_print.call_args_list
+        )
+        self.assertIn("[OpenAI LLM Debug] stage=ranking model=gpt-5.2-mini", printed)
+        self.assertIn("not valid ranking output", printed)
+        self.assertIn("validation_error=RankingError", printed)
 
     def test_openai_ranker_accepts_blocks_primary_candidate_json(self) -> None:
         response = FakeOpenAICompletion('{"candidate_id": 7}')

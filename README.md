@@ -375,6 +375,10 @@ When `gemini` mode is active, the backend uses Google’s supported `google-gena
 
 When `openai` mode is active, the backend uses the `openai` Python client and can target either OpenAI itself or any OpenAI-compatible endpoint through `OPENAI_BASE_URL`.
 
+If you are debugging an OpenAI-compatible gateway, set `SEMANTRIS_DEBUG_OPENAI_LLM=1` in your shell or `.env` before starting Flask to dump the OpenAI request and raw completion payloads to stdout. Failed OpenAI validation paths also force a one-off trace automatically, which is especially useful when a gateway returns a successful envelope with `choices[0].message.content` empty or pushes output into `reasoning_content` without ever emitting a final answer.
+
+Some OpenAI-compatible local gateways only populate `delta.content` during streaming and leave the non-streaming `message.content` empty. The backend now retries once in streaming mode when that happens so compatible local deployments can still rank words normally.
+
 Only one remote provider is active per process. The app does not fail over from one remote provider to the other at runtime.
 
 If the configured remote provider is unavailable, fails validation checks, or cannot initialize, the backend now falls back to a stronger local semantic fallback ranker and then to the older heuristic fallback if needed.

@@ -154,8 +154,14 @@ def render_blocks_scoring_prompt(clue: str, candidates: Sequence[BlocksCandidate
     return f"{BLOCKS_SCORING_SYSTEM_PROMPT}\n\n{render_blocks_scoring_input(clue, candidates)}"
 
 
+_DEBUG_FLAG_OVERRIDES: dict[str, bool] = {}
+
+
 def _env_flag(name: str) -> bool:
-    return os.getenv(name, "0").strip().lower() in {"1", "true", "yes", "on"}
+    raw_value = os.getenv(name)
+    if raw_value is not None:
+        return raw_value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(_DEBUG_FLAG_OVERRIDES.get(name, False))
 
 
 def _emit_blocks_llm_debug_trace(
@@ -184,6 +190,43 @@ def _emit_blocks_llm_debug_trace(
     if error is not None:
         print(
             f"[Blocks LLM Debug] validation_error={error.__class__.__name__}: {error}",
+            flush=True,
+        )
+
+
+def _serialize_debug_payload(payload: Any) -> str:
+    try:
+        return json.dumps(payload, indent=2, sort_keys=True, default=str)
+    except Exception:
+        return repr(payload)
+
+
+def _emit_openai_llm_debug_trace(
+    *,
+    stage: str,
+    model_name: str,
+    request_payload: dict[str, Any],
+    response_payload: Any,
+    response_text: str,
+    error: Exception | None = None,
+    force: bool = False,
+) -> None:
+    if not force and not _env_flag("SEMANTRIS_DEBUG_OPENAI_LLM"):
+        return
+
+    print(f"[OpenAI LLM Debug] stage={stage} model={model_name}", flush=True)
+    print("[OpenAI LLM Debug] request_payload_begin", flush=True)
+    print(_serialize_debug_payload(request_payload), flush=True)
+    print("[OpenAI LLM Debug] request_payload_end", flush=True)
+    print("[OpenAI LLM Debug] response_payload_begin", flush=True)
+    print(_serialize_debug_payload(response_payload), flush=True)
+    print("[OpenAI LLM Debug] response_payload_end", flush=True)
+    print("[OpenAI LLM Debug] extracted_text_begin", flush=True)
+    print(response_text if response_text else "<empty>", flush=True)
+    print("[OpenAI LLM Debug] extracted_text_end", flush=True)
+    if error is not None:
+        print(
+            f"[OpenAI LLM Debug] validation_error={error.__class__.__name__}: {error}",
             flush=True,
         )
 
@@ -872,9 +915,96 @@ def _coerce_openai_message_content(content: Any) -> str:
             text_value = _value_from_attr_or_key(item, "text")
             if isinstance(text_value, str) and text_value.strip():
                 parts.append(text_value.strip())
+                continue
+
+            nested_value = _value_from_attr_or_key(text_value, "value")
+            if isinstance(nested_value, str) and nested_value.strip():
+                parts.append(nested_value.strip())
         return "\n".join(parts).strip()
 
     return ""
+
+
+def _serialize_openai_response(response: Any) -> Any:
+    model_dump = getattr(response, "model_dump", None)
+    if callable(model_dump):
+        try:
+            return model_dump()
+        except TypeError:
+            return model_dump(mode="json")
+    if isinstance(response, dict):
+        return response
+    return repr(response)
+
+
+def _serialize_openai_stream_chunk(chunk: Any) -> Any:
+    model_dump = getattr(chunk, "model_dump", None)
+    if callable(model_dump):
+        try:
+            return model_dump()
+        except TypeError:
+            return model_dump(mode="json")
+    if isinstance(chunk, dict):
+        return chunk
+    return repr(chunk)
+
+
+def _extract_openai_stream_text(stream: Any) -> tuple[str, list[Any]]:
+    parts: list[str] = []
+    serialized_chunks: list[Any] = []
+    reasoning_seen = False
+    finish_reason: str | None = None
+
+    for chunk in stream:
+        serialized_chunks.append(_serialize_openai_stream_chunk(chunk))
+        choices = _value_from_attr_or_key(chunk, "choices") or []
+        if not choices:
+            continue
+
+        first_choice = choices[0]
+        finish_reason = _value_from_attr_or_key(first_choice, "finish_reason") or finish_reason
+        delta = _value_from_attr_or_key(first_choice, "delta")
+        if delta is None:
+            continue
+
+        delta_content = _value_from_attr_or_key(delta, "content")
+        if isinstance(delta_content, str):
+            text_piece = delta_content
+        elif isinstance(delta_content, list):
+            pieces: list[str] = []
+            for item in delta_content:
+                text_value = _value_from_attr_or_key(item, "text")
+                if isinstance(text_value, str):
+                    pieces.append(text_value)
+                    continue
+
+                nested_value = _value_from_attr_or_key(text_value, "value")
+                if isinstance(nested_value, str):
+                    pieces.append(nested_value)
+            text_piece = "".join(pieces)
+        else:
+            text_piece = ""
+        if text_piece:
+            parts.append(text_piece)
+
+        reasoning_content = _value_from_attr_or_key(delta, "reasoning_content")
+        if isinstance(reasoning_content, str) and reasoning_content.strip():
+            reasoning_seen = True
+
+    text = "".join(parts).strip()
+    if text:
+        return (text, serialized_chunks)
+
+    if reasoning_seen:
+        if finish_reason == "length":
+            raise RankingError(
+                "Model returned no final answer content; reasoning_content was present and the response hit the max token limit first."
+            )
+        raise RankingError(
+            "Model returned no final answer content; reasoning_content was present but content was empty."
+        )
+
+    raise RankingError("Model returned an empty response.")
 
 
 def _extract_openai_response_text(response: Any) -> str:
@@ -890,6 +1020,16 @@ def _extract_openai_response_text(response: Any) -> str:
     content = _value_from_attr_or_key(message, "content")
     text = _coerce_openai_message_content(content)
     if not text:
+        reasoning_content = _value_from_attr_or_key(message, "reasoning_content")
+        finish_reason = _value_from_attr_or_key(first_choice, "finish_reason")
+        if isinstance(reasoning_content, str) and reasoning_content.strip():
+            if finish_reason == "length":
+                raise RankingError(
+                    "Model returned no final answer content; reasoning_content was present and the response hit the max token limit first."
+                )
+            raise RankingError(
+                "Model returned no final answer content; reasoning_content was present but content was empty."
+            )
         raise RankingError("Model returned an empty response.")
 
     return text
@@ -1140,22 +1280,95 @@ class OpenAICompatibleRanker:
     def base_url(self) -> str:
         return self._base_url
 
-    def _complete(self, system_prompt: str, user_prompt: str) -> str:
-        completion = self._client.chat.completions.create(
-            model=self._model_name,
-            messages=[
+    def _complete(
+        self,
+        stage: str,
+        system_prompt: str,
+        user_prompt: str,
+    ) -> tuple[str, dict[str, Any], Any]:
+        request_payload = {
+            "model": self._model_name,
+            "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
             **self._request_options,
+        }
+        completion = self._client.chat.completions.create(**request_payload)
+        response_payload = _serialize_openai_response(completion)
+
+        try:
+            response_text = _extract_openai_response_text(completion)
+        except Exception as exc:
+            stream_request_payload = {
+                **request_payload,
+                "stream": True,
+            }
+            try:
+                stream_completion = self._client.chat.completions.create(**stream_request_payload)
+                stream_text, stream_chunks = _extract_openai_stream_text(stream_completion)
+                stream_response_payload = {
+                    "mode": "stream-fallback",
+                    "non_stream_response": response_payload,
+                    "stream_chunks": stream_chunks,
+                    "non_stream_error": str(exc),
+                }
+                _emit_openai_llm_debug_trace(
+                    stage=stage,
+                    model_name=self._model_name,
+                    request_payload=stream_request_payload,
+                    response_payload=stream_response_payload,
+                    response_text=stream_text,
+                    force=False,
+                )
+                return (stream_text, stream_request_payload, stream_response_payload)
+            except Exception as stream_exc:
+                combined_response_payload = {
+                    "mode": "stream-fallback-failed",
+                    "non_stream_response": response_payload,
+                    "non_stream_error": str(exc),
+                    "stream_error": str(stream_exc),
+                }
+                _emit_openai_llm_debug_trace(
+                    stage=stage,
+                    model_name=self._model_name,
+                    request_payload=stream_request_payload,
+                    response_payload=combined_response_payload,
+                    response_text="",
+                    error=stream_exc if isinstance(stream_exc, Exception) else None,
+                    force=True,
+                )
+                raise stream_exc
+
+        _emit_openai_llm_debug_trace(
+            stage=stage,
+            model_name=self._model_name,
+            request_payload=request_payload,
+            response_payload=response_payload,
+            response_text=response_text,
+            force=False,
         )
-        return _extract_openai_response_text(completion)
+        return (response_text, request_payload, response_payload)
 
     def rank_words(self, clue: str, words: Sequence[str]) -> list[str]:
-        return parse_ranked_words(
-            self._complete(RANKING_SYSTEM_PROMPT, render_ranking_input(clue, words)),
-            words,
+        response_text, request_payload, response_payload = self._complete(
+            "ranking",
+            RANKING_SYSTEM_PROMPT,
+            render_ranking_input(clue, words),
         )
+        try:
+            return parse_ranked_words(response_text, words)
+        except Exception as exc:
+            _emit_openai_llm_debug_trace(
+                stage="ranking",
+                model_name=self._model_name,
+                request_payload=request_payload,
+                response_payload=response_payload,
+                response_text=response_text,
+                error=exc if isinstance(exc, Exception) else None,
+                force=True,
+            )
+            raise
 
     def judge_restricted_clue(
         self,
@@ -1163,45 +1376,94 @@ class OpenAICompatibleRanker:
         clue: str,
         words: Sequence[str],
     ) -> tuple[bool, str, list[str] | None]:
-        return parse_restricted_ranking(
-            self._complete(
-                RESTRICTION_SYSTEM_PROMPT,
-                render_restriction_input(rule_text, clue, words),
-            ),
-            words,
+        response_text, request_payload, response_payload = self._complete(
+            "restriction",
+            RESTRICTION_SYSTEM_PROMPT,
+            render_restriction_input(rule_text, clue, words),
         )
+        try:
+            return parse_restricted_ranking(response_text, words)
+        except Exception as exc:
+            _emit_openai_llm_debug_trace(
+                stage="restriction",
+                model_name=self._model_name,
+                request_payload=request_payload,
+                response_payload=response_payload,
+                response_text=response_text,
+                error=exc if isinstance(exc, Exception) else None,
+                force=True,
+            )
+            raise
 
     def score_words_against_clue(self, clue: str, words: Sequence[str]) -> list[WordScore]:
-        return parse_word_scoring(
-            self._complete(SCORING_SYSTEM_PROMPT, render_scoring_input(clue, words)),
-            words,
+        response_text, request_payload, response_payload = self._complete(
+            "scoring",
+            SCORING_SYSTEM_PROMPT,
+            render_scoring_input(clue, words),
         )
+        try:
+            return parse_word_scoring(response_text, words)
+        except Exception as exc:
+            _emit_openai_llm_debug_trace(
+                stage="scoring",
+                model_name=self._model_name,
+                request_payload=request_payload,
+                response_payload=response_payload,
+                response_text=response_text,
+                error=exc if isinstance(exc, Exception) else None,
+                force=True,
+            )
+            raise
 
     def pick_blocks_primary_candidate(
         self,
         clue: str,
         candidates: Sequence[BlocksCandidate],
     ) -> int:
-        return parse_blocks_primary_candidate(
-            self._complete(
-                BLOCKS_PRIMARY_SYSTEM_PROMPT,
-                render_blocks_primary_input(clue, candidates),
-            ),
-            [candidate.candidate_id for candidate in candidates],
+        response_text, request_payload, response_payload = self._complete(
+            "blocks-primary",
+            BLOCKS_PRIMARY_SYSTEM_PROMPT,
+            render_blocks_primary_input(clue, candidates),
         )
+        expected_candidate_ids = [candidate.candidate_id for candidate in candidates]
+        try:
+            return parse_blocks_primary_candidate(response_text, expected_candidate_ids)
+        except Exception as exc:
+            _emit_openai_llm_debug_trace(
+                stage="blocks-primary",
+                model_name=self._model_name,
+                request_payload=request_payload,
+                response_payload=response_payload,
+                response_text=response_text,
+                error=exc if isinstance(exc, Exception) else None,
+                force=True,
+            )
+            raise
 
     def score_blocks_candidates(
         self,
         clue: str,
         candidates: Sequence[BlocksCandidate],
     ) -> list[BlocksCandidateScore]:
-        return parse_blocks_candidate_scoring(
-            self._complete(
-                BLOCKS_SCORING_SYSTEM_PROMPT,
-                render_blocks_scoring_input(clue, candidates),
-            ),
-            [candidate.candidate_id for candidate in candidates],
+        response_text, request_payload, response_payload = self._complete(
+            "blocks-scoring",
+            BLOCKS_SCORING_SYSTEM_PROMPT,
+            render_blocks_scoring_input(clue, candidates),
         )
+        expected_candidate_ids = [candidate.candidate_id for candidate in candidates]
+        try:
+            return parse_blocks_candidate_scoring(response_text, expected_candidate_ids)
+        except Exception as exc:
+            _emit_openai_llm_debug_trace(
+                stage="blocks-scoring",
+                model_name=self._model_name,
+                request_payload=request_payload,
+                response_payload=response_payload,
+                response_text=response_text,
+                error=exc if isinstance(exc, Exception) else None,
+                force=True,
+            )
+            raise
 
 
 class HeuristicRanker:
@@ -1961,6 +2223,12 @@ def build_ranker_from_env(
     settings: Settings | None = None,
 ) -> ResilientRanker:
     settings = settings or Settings(_env_file=None)
+    _DEBUG_FLAG_OVERRIDES.update(
+        {
+            "SEMANTRIS_DEBUG_BLOCKS_LLM": settings.semantris_debug_blocks_llm,
+            "SEMANTRIS_DEBUG_OPENAI_LLM": settings.semantris_debug_openai_llm,
+        }
+    )
     normalized_provider = (provider_name or settings.semantris_llm_provider).strip().casefold()
     cache = build_semantic_cache(settings)
 

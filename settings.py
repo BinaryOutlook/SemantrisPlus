@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     semantris_llm_provider: Literal["gemini", "openai"] = "gemini"
     semantris_vocab_file: str = "assets/aviation_1.txt"
     semantris_debug_blocks_llm: bool = False
+    semantris_debug_openai_llm: bool = False
     semantris_skip_llm_startup_probe: bool = False
     semantris_use_fake_ranker: bool = False
 
