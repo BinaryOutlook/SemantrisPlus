@@ -31,6 +31,7 @@ Reference folders may also exist for imported inspiration material or rough sour
 ## Current active planning folders
 
 - `PRDs/v0.3.1/`
+- `PRDs/v0.4/`
 
 ## Reference-only source folder
 
