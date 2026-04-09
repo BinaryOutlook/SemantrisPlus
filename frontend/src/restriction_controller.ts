@@ -1,7 +1,11 @@
 import { animateBoardTransition, explodeWords } from "./animations";
 import { renderBoard, syncStageMetrics } from "./board";
 import { setBusy, setStatus, updateHud } from "./hud";
-import { createNewRestrictionGame, loadRestrictionState, submitRestrictionTurn } from "./restriction_api";
+import {
+  createNewRestrictionGame,
+  loadRestrictionState,
+  submitRestrictionTurn,
+} from "./restriction_api";
 import type { RestrictionElements } from "./restriction_dom";
 import type { RestrictionState, RestrictionTurnResponse } from "./restriction_types";
 import { createClientState } from "./state";
@@ -30,7 +34,11 @@ function renderStrikeMeter(elements: RestrictionElements, state: RestrictionStat
   elements.strikeMeter.replaceChildren(fragment);
 }
 
-function updateRestrictionHud(elements: RestrictionElements, clientState: ReturnType<typeof createClientState>, state: RestrictionState): void {
+function updateRestrictionHud(
+  elements: RestrictionElements,
+  clientState: ReturnType<typeof createClientState>,
+  state: RestrictionState
+): void {
   updateHud(elements, clientState, state);
   elements.activeRuleName.textContent = state.active_rule_name;
   elements.activeRuleDescription.textContent = state.active_rule_description;
@@ -40,13 +48,20 @@ function updateRestrictionHud(elements: RestrictionElements, clientState: Return
     elements.ruleResultValue.textContent = "Awaiting clue";
     elements.ruleResultValue.className = "status-pill";
   } else {
-    elements.ruleResultValue.textContent = state.last_rule_reason ?? (state.last_rule_passed ? "Rule passed." : "Rule failed.");
+    elements.ruleResultValue.textContent =
+      state.last_rule_reason ?? (state.last_rule_passed ? "Rule passed." : "Rule failed.");
     elements.ruleResultValue.className = "status-pill";
-    elements.ruleResultValue.classList.add(state.last_rule_passed ? "restriction-pill--pass" : "restriction-pill--fail");
+    elements.ruleResultValue.classList.add(
+      state.last_rule_passed ? "restriction-pill--pass" : "restriction-pill--fail"
+    );
   }
 
   if (state.game_over && state.game_result === "loss") {
-    setStatus(elements, "The run ended before the tower could be cleared. Start a new game to try again.", "error");
+    setStatus(
+      elements,
+      "The run ended before the tower could be cleared. Start a new game to try again.",
+      "error"
+    );
   }
 }
 
@@ -78,7 +93,7 @@ export function initRestrictionController(elements: RestrictionElements): void {
           spawnedWords: result.penalty_words,
           spawnFrom: "bottom",
         },
-        prefersReducedMotion,
+        prefersReducedMotion
       );
       syncStageMetrics(elements, result.state);
       updateRestrictionHud(elements, clientState, result.state);
@@ -86,7 +101,10 @@ export function initRestrictionController(elements: RestrictionElements): void {
       return;
     }
 
-    const rankedState = buildRankedBoardState(currentState, result.ranked_board ?? result.new_board);
+    const rankedState = buildRankedBoardState(
+      currentState,
+      result.ranked_board ?? result.new_board
+    );
 
     if (result.resolution === "miss") {
       await animateBoardTransition(
@@ -94,7 +112,7 @@ export function initRestrictionController(elements: RestrictionElements): void {
         result.ranked_board ?? result.new_board,
         rankedState,
         { duration: animationTimings.miss },
-        prefersReducedMotion,
+        prefersReducedMotion
       );
       syncStageMetrics(elements, result.state);
       updateRestrictionHud(elements, clientState, result.state);
@@ -107,10 +125,15 @@ export function initRestrictionController(elements: RestrictionElements): void {
       result.ranked_board ?? result.new_board,
       rankedState,
       { duration: animationTimings.reorder },
-      prefersReducedMotion,
+      prefersReducedMotion
     );
     await wait(animationTimings.handoff);
-    await explodeWords(elements, result.words_removed, animationTimings.explode, prefersReducedMotion);
+    await explodeWords(
+      elements,
+      result.words_removed,
+      animationTimings.explode,
+      prefersReducedMotion
+    );
     await animateBoardTransition(
       elements,
       result.new_board,
@@ -120,7 +143,7 @@ export function initRestrictionController(elements: RestrictionElements): void {
         spawnDuration: animationTimings.settle,
         spawnedWords: result.spawned_words,
       },
-      prefersReducedMotion,
+      prefersReducedMotion
     );
     syncStageMetrics(elements, result.state);
     updateRestrictionHud(elements, clientState, result.state);
@@ -137,7 +160,11 @@ export function initRestrictionController(elements: RestrictionElements): void {
       return;
     }
 
-    setStatus(elements, "Rule locked. Type a clue that satisfies it, then pull the tower into the clear zone.", "neutral");
+    setStatus(
+      elements,
+      "Rule locked. Type a clue that satisfies it, then pull the tower into the clear zone.",
+      "neutral"
+    );
   }
 
   async function startNewGame(): Promise<void> {

@@ -1,50 +1,5 @@
 "use strict";
 (() => {
-  // frontend/src/api.ts
-  function parseErrorMessage(payload) {
-    if (payload && typeof payload === "object" && "error" in payload) {
-      const { error } = payload;
-      if (typeof error === "string" && error.trim()) {
-        return error;
-      }
-    }
-    return null;
-  }
-  async function fetchJson(url, options = {}) {
-    const response = await fetch(url, {
-      headers: {
-        "Content-Type": "application/json",
-        ...options.headers ?? {}
-      },
-      ...options
-    });
-    let payload = null;
-    try {
-      payload = await response.json();
-    } catch {
-      payload = null;
-    }
-    if (!response.ok) {
-      throw new Error(parseErrorMessage(payload) ?? "Request failed.");
-    }
-    return payload;
-  }
-  function loadGameState() {
-    return fetchJson("/api/game/state");
-  }
-  function createNewGame() {
-    return fetchJson("/api/game/new", {
-      method: "POST",
-      body: "{}"
-    });
-  }
-  function submitClueTurn(clue) {
-    return fetchJson("/api/game/turn", {
-      method: "POST",
-      body: JSON.stringify({ clue })
-    });
-  }
-
   // frontend/src/utils.ts
   function formatElapsed(startedAtMs, nowMs = Date.now()) {
     const elapsedSeconds = Math.max(0, Math.floor((nowMs - startedAtMs) / 1e3));
@@ -248,6 +203,51 @@
     }
   }
 
+  // frontend/src/api.ts
+  function parseErrorMessage(payload) {
+    if (payload && typeof payload === "object" && "error" in payload) {
+      const { error } = payload;
+      if (typeof error === "string" && error.trim()) {
+        return error;
+      }
+    }
+    return null;
+  }
+  async function fetchJson(url, options = {}) {
+    const response = await fetch(url, {
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers ?? {}
+      },
+      ...options
+    });
+    let payload = null;
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+    if (!response.ok) {
+      throw new Error(parseErrorMessage(payload) ?? "Request failed.");
+    }
+    return payload;
+  }
+  function loadGameState() {
+    return fetchJson("/api/game/state");
+  }
+  function createNewGame() {
+    return fetchJson("/api/game/new", {
+      method: "POST",
+      body: "{}"
+    });
+  }
+  function submitClueTurn(clue) {
+    return fetchJson("/api/game/turn", {
+      method: "POST",
+      body: JSON.stringify({ clue })
+    });
+  }
+
   // frontend/src/hud.ts
   function setBusy(elements2, clientState, nextBusy) {
     clientState.busy = nextBusy;
@@ -297,6 +297,19 @@
     elements2.gameOverTitle.textContent = title;
     elements2.gameOverMessage.textContent = message;
   }
+  function buildPersistenceMessage(state) {
+    const persistence = state.persistence;
+    if (!persistence.run_saved && !persistence.best_run) {
+      return "";
+    }
+    if (persistence.is_new_best) {
+      return " New local best.";
+    }
+    if (persistence.best_run) {
+      return ` Local best: ${persistence.best_run.score}.`;
+    }
+    return "";
+  }
   function updateHud(elements2, clientState, state) {
     clientState.currentState = state;
     elements2.score.textContent = String(state.score);
@@ -319,13 +332,8 @@
     if (state.game_over) {
       setStatus(elements2, "You cleared the tower. Start a new game to play again.", "hit");
       const gameOverTitle = state.game_result === "loss" ? "Run over." : "You won.";
-      const gameOverMessage = state.game_result === "loss" ? `The run ended in ${elements2.timer.textContent}. Start a new game to try again.` : `You cleared the tower in ${elements2.timer.textContent}. Start a new game to play again.`;
-      setGameOverModal(
-        elements2,
-        true,
-        gameOverTitle,
-        gameOverMessage
-      );
+      const gameOverMessage = state.game_result === "loss" ? `The run ended in ${elements2.timer.textContent}. Start a new game to try again.${buildPersistenceMessage(state)}` : `You cleared the tower in ${elements2.timer.textContent}. Start a new game to play again.${buildPersistenceMessage(state)}`;
+      setGameOverModal(elements2, true, gameOverTitle, gameOverMessage);
       elements2.submitButton.textContent = state.game_result === "loss" ? "Run Over" : "Run Complete";
       elements2.submitButton.disabled = true;
       elements2.clueInput.disabled = true;
@@ -387,7 +395,12 @@
         prefersReducedMotion
       );
       await wait(animationTimings.handoff);
-      await explodeWords(elements2, result.words_removed, animationTimings.explode, prefersReducedMotion);
+      await explodeWords(
+        elements2,
+        result.words_removed,
+        animationTimings.explode,
+        prefersReducedMotion
+      );
       await animateBoardTransition(
         elements2,
         result.new_board,
@@ -512,7 +525,10 @@
       gameOverModal: requireElement("game-over-modal", documentRef),
       gameOverTitle: requireElement("game-over-title", documentRef),
       gameOverMessage: requireElement("game-over-message", documentRef),
-      gameOverNewGameButton: requireElement("game-over-new-game-button", documentRef),
+      gameOverNewGameButton: requireElement(
+        "game-over-new-game-button",
+        documentRef
+      ),
       clueForm: requireElement("clue-form", documentRef),
       clueInput: requireElement("clue-input", documentRef),
       submitButton: requireElement("submit-button", documentRef),

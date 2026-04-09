@@ -1,4 +1,8 @@
-import { animateBlocksGridTransition, fadeOutBlockCells, flashPrimaryCell } from "./blocks_animations";
+import {
+  animateBlocksGridTransition,
+  fadeOutBlockCells,
+  flashPrimaryCell,
+} from "./blocks_animations";
 import { createNewBlocksGame, loadBlocksState, submitBlocksTurn } from "./blocks_api";
 import { renderBlocksGrid } from "./blocks_board";
 import type { BlocksElements } from "./blocks_dom";
@@ -29,7 +33,7 @@ function createBlocksClientState(): BlocksClientState {
 function setBlocksBusy(
   elements: BlocksElements,
   clientState: BlocksClientState,
-  nextBusy: boolean,
+  nextBusy: boolean
 ): void {
   clientState.busy = nextBusy;
   elements.body.classList.toggle("is-busy", nextBusy);
@@ -44,7 +48,7 @@ function setBlocksBusy(
 function startTimer(
   elements: Pick<BlocksElements, "timer">,
   clientState: BlocksClientState,
-  startedAtMs: number,
+  startedAtMs: number
 ): void {
   if (clientState.timerHandle !== null) {
     window.clearInterval(clientState.timerHandle);
@@ -60,7 +64,7 @@ function stopTimer(
   elements: Pick<BlocksElements, "timer">,
   clientState: BlocksClientState,
   startedAtMs: number,
-  endedAtMs: number | null,
+  endedAtMs: number | null
 ): void {
   if (clientState.timerHandle !== null) {
     window.clearInterval(clientState.timerHandle);
@@ -71,13 +75,10 @@ function stopTimer(
 }
 
 function setGameOverModal(
-  elements: Pick<
-    BlocksElements,
-    "body" | "gameOverModal" | "gameOverTitle" | "gameOverMessage"
-  >,
+  elements: Pick<BlocksElements, "body" | "gameOverModal" | "gameOverTitle" | "gameOverMessage">,
   isOpen: boolean,
   title = "You won.",
-  message = "",
+  message = ""
 ): void {
   elements.body.classList.toggle("has-game-over-modal", isOpen);
   elements.gameOverModal.hidden = !isOpen;
@@ -93,10 +94,27 @@ function setGameOverModal(
   elements.gameOverMessage.textContent = message;
 }
 
+function buildPersistenceMessage(state: BlocksState): string {
+  const persistence = state.persistence;
+  if (!persistence.run_saved && !persistence.best_run) {
+    return "";
+  }
+
+  if (persistence.is_new_best) {
+    return " New local best.";
+  }
+
+  if (persistence.best_run) {
+    return ` Local best: ${persistence.best_run.score}.`;
+  }
+
+  return "";
+}
+
 function updateBlocksHud(
   elements: BlocksElements,
   clientState: BlocksClientState,
-  state: BlocksState,
+  state: BlocksState
 ): void {
   clientState.currentState = state;
 
@@ -126,8 +144,8 @@ function updateBlocksHud(
       true,
       state.game_result === "loss" ? "Run over." : "You won.",
       state.game_result === "loss"
-        ? `The run ended in ${elements.timer.textContent}. Start a new game to try again.`
-        : `You cleared the grid in ${elements.timer.textContent}. Start a new game to play again.`,
+        ? `The run ended in ${elements.timer.textContent}. Start a new game to try again.${buildPersistenceMessage(state)}`
+        : `You cleared the grid in ${elements.timer.textContent}. Start a new game to play again.${buildPersistenceMessage(state)}`
     );
     elements.submitButton.textContent = "Run Complete";
     elements.submitButton.disabled = true;
@@ -147,13 +165,13 @@ export function initBlocksController(elements: BlocksElements): void {
       elements,
       result.primary_cell,
       animationTimings.primary,
-      prefersReducedMotion,
+      prefersReducedMotion
     );
     await fadeOutBlockCells(
       elements,
       result.removed_cells,
       animationTimings.explode,
-      prefersReducedMotion,
+      prefersReducedMotion
     );
     await animateBlocksGridTransition(
       elements,
@@ -164,7 +182,7 @@ export function initBlocksController(elements: BlocksElements): void {
         spawnDuration: animationTimings.settle,
         spawnedWords: result.spawned_words,
       },
-      prefersReducedMotion,
+      prefersReducedMotion
     );
     updateBlocksHud(elements, clientState, result.state);
     setStatus(elements, messageWithWarning(result), "hit");
@@ -179,7 +197,11 @@ export function initBlocksController(elements: BlocksElements): void {
       return;
     }
 
-    setStatus(elements, "Find an anchor word, trigger a chain, and let gravity reshape the board.", "neutral");
+    setStatus(
+      elements,
+      "Find an anchor word, trigger a chain, and let gravity reshape the board.",
+      "neutral"
+    );
   }
 
   async function startNewGame(): Promise<void> {

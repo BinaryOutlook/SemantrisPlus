@@ -4,7 +4,7 @@ import type { BlocksCell, BlocksState } from "./blocks_types";
 export function applyBlocksCellClasses(
   element: HTMLElement,
   cell: BlocksCell,
-  state: BlocksState,
+  state: BlocksState
 ): void {
   element.className = "blocks-cell";
   element.dataset.cell = String(cell.cell);
@@ -40,7 +40,7 @@ export function createBlocksCellElement(cell: BlocksCell, state: BlocksState): H
 export function renderBlocksGrid(
   elements: Pick<BlocksElements, "blocksGrid">,
   cells: BlocksCell[],
-  state: BlocksState,
+  state: BlocksState
 ): void {
   elements.blocksGrid.style.setProperty("--blocks-columns", String(state.grid_width));
   elements.blocksGrid.style.setProperty("--blocks-rows", String(state.grid_height));

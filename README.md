@@ -253,10 +253,14 @@ SemantrisPlus/
 - esbuild for frontend bundling
 - custom CSS
 - system-aware light/dark theming with manual override
+- Pydantic Settings for typed runtime configuration
+- SQLAlchemy for local run persistence and best-score queries
 - Google Gemini API via the Google Gen AI SDK
 - OpenAI-compatible model access via the OpenAI Python client
 - `unittest` for automated tests
 - Vitest for frontend unit and DOM tests
+- Playwright for end-to-end browser flows
+- Biome for frontend linting and formatting checks
 
 ## Getting Started
 
@@ -303,8 +307,10 @@ For a validation pass before or after changes:
 
 ```bash
 npm run check:frontend
+npm run lint
 npm run test:frontend
 python3 -m unittest discover -s tests
+npm run test:e2e
 ```
 
 ## Configuration
@@ -334,6 +340,24 @@ You can also override the startup default with an environment variable:
 SEMANTRIS_VOCAB_FILE="assets/aviation_1.txt"
 ```
 
+### Typed runtime settings
+
+The app now centralizes runtime configuration through `settings.py`.
+
+Common `v0.4` settings include:
+
+```env
+SEMANTRIS_USE_FAKE_RANKER="0"
+SEMANTRIS_CACHE_BACKEND="memory"
+SEMANTRIS_CACHE_MAX_ENTRIES="512"
+SEMANTRIS_PERSISTENCE_BACKEND="sqlite"
+SEMANTRIS_DATABASE_URL="sqlite:///instance/semantris_plus.sqlite3"
+SEMANTRIS_RUN_STORE_ENABLED="1"
+SEMANTRIS_SKIP_LLM_STARTUP_PROBE="0"
+```
+
+`SEMANTRIS_USE_FAKE_RANKER="1"` is especially useful for deterministic browser testing because it avoids remote LLM dependencies entirely.
+
 ### Ranking provider
 
 Choose the active remote provider with:
@@ -353,9 +377,21 @@ When `openai` mode is active, the backend uses the `openai` Python client and ca
 
 Only one remote provider is active per process. The app does not fail over from one remote provider to the other at runtime.
 
-If the configured remote provider is unavailable(timed out), fails validation checks, or cannot initialize, the backend falls back to a deterministic local heuristic ranker so the session does not hard-fail.
+If the configured remote provider is unavailable, fails validation checks, or cannot initialize, the backend now falls back to a stronger local semantic fallback ranker and then to the older heuristic fallback if needed.
 
-This fallback is intentionally simple. It is a resilience feature, not a semantic replacement for the primary model.
+This local fallback path is still primarily a resilience feature rather than a full semantic replacement for the primary model.
+
+### Persistence
+
+`v0.4` adds local run persistence and best-score tracking.
+
+By default, the app can store completed run summaries in SQLite and surface best-score information back to the frontend so game-over flows can report new local bests.
+
+Persistence is intentionally local and lightweight:
+
+- no accounts
+- no cloud sync
+- no multiplayer profile system
 
 ## Development
 
@@ -363,15 +399,19 @@ This fallback is intentionally simple. It is a resilience feature, not a semanti
 
 ```bash
 npm run check:frontend
+npm run lint
 npm run test:frontend
 python3 -m unittest discover -s tests
+npm run test:e2e
 ```
 
 ### Frontend commands
 
 - `npm run build`: compile the TypeScript frontend into the browser bundles served by Flask
 - `npm run check:frontend`: run TypeScript type-checking without emitting files
+- `npm run lint`: run Biome frontend checks
 - `npm run test:frontend`: run frontend unit and DOM tests with Vitest
+- `npm run test:e2e`: run Playwright browser flows with a local fake-ranker server
 
 ### Supporting documents
 
@@ -401,7 +441,7 @@ This repo is aiming for a small but professional standard:
 - LLM ranking is probabilistic, so some rounds will feel less stable than deterministic puzzle logic
 - the fallback ranker is much weaker than Gemini
 - animation quality is improved but still not at final production polish
-- there is no persistent profile, save system, or leaderboard yet
+- there is no persistent profile, account system, or cloud leaderboard yet
 - the current set of modes is still an early structured version of the larger idea
 
 ## Roadmap

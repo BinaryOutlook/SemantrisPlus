@@ -1,3 +1,18 @@
+export interface BestRunSummary {
+  run_record_id: number;
+  score: number;
+  turns: number;
+  elapsed_seconds: number;
+  created_at: string;
+}
+
+export interface PersistenceSummary {
+  run_record_id: number | null;
+  run_saved: boolean;
+  is_new_best: boolean;
+  best_run: BestRunSummary | null;
+}
+
 export interface GameState {
   mode_id: string;
   score: number;
@@ -21,6 +36,7 @@ export interface GameState {
   seen_words: number;
   total_vocabulary: number;
   run_exhausted: boolean;
+  persistence: PersistenceSummary;
 }
 
 export interface StateResponse {

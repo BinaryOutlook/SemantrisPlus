@@ -67,7 +67,7 @@ describe("initThemeControls", () => {
 
     initThemeControls(document, window);
     const cupertinoButton = document.querySelector<HTMLButtonElement>(
-      '[data-theme-option="cupertino"]',
+      '[data-theme-option="cupertino"]'
     );
     cupertinoButton?.click();
 

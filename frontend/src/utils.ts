@@ -31,14 +31,12 @@ export function getErrorMessage(error: unknown): string {
   return "Request failed.";
 }
 
-export function messageWithWarning(
-  result: {
-    message: string;
-    state: {
-      last_warning: string | null;
-    };
-  },
-): string {
+export function messageWithWarning(result: {
+  message: string;
+  state: {
+    last_warning: string | null;
+  };
+}): string {
   if (result.state.last_warning) {
     return `${result.message} ${result.state.last_warning}`;
   }
@@ -46,10 +44,7 @@ export function messageWithWarning(
   return result.message;
 }
 
-export function buildRankedBoardState(
-  currentState: GameState,
-  rankedBoard: string[],
-): GameState {
+export function buildRankedBoardState(currentState: GameState, rankedBoard: string[]): GameState {
   return {
     ...currentState,
     board: rankedBoard,

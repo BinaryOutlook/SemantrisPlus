@@ -1,8 +1,5 @@
+import type { RestrictionStateResponse, RestrictionTurnResponse } from "./restriction_types";
 import type { ErrorResponse } from "./types";
-import type {
-  RestrictionStateResponse,
-  RestrictionTurnResponse,
-} from "./restriction_types";
 
 function parseErrorMessage(payload: unknown): string | null {
   if (payload && typeof payload === "object" && "error" in payload) {
@@ -42,7 +39,9 @@ export function loadRestrictionState(): Promise<RestrictionStateResponse> {
   return fetchJson<RestrictionStateResponse>("/api/restriction/state");
 }
 
-export function createNewRestrictionGame(): Promise<RestrictionStateResponse & { message: string }> {
+export function createNewRestrictionGame(): Promise<
+  RestrictionStateResponse & { message: string }
+> {
   return fetchJson<RestrictionStateResponse & { message: string }>("/api/restriction/new", {
     method: "POST",
     body: "{}",

@@ -11,6 +11,7 @@ from llm_client import (
     WordScore,
     WordScoringResult,
 )
+from persistence import NullRunStore
 
 
 class DummyRanker:
@@ -92,6 +93,11 @@ class AppRouteTests(unittest.TestCase):
     def setUp(self) -> None:
         app_module.app.config.update(TESTING=True)
         self.client = app_module.app.test_client()
+        self._original_run_store = app_module.RUN_STORE
+        app_module.RUN_STORE = NullRunStore()
+
+    def tearDown(self) -> None:
+        app_module.RUN_STORE = self._original_run_store
 
     def test_home_page_loads_iteration_mode_entry_and_pack_selector(self) -> None:
         response = self.client.get("/")
@@ -171,6 +177,8 @@ class AppRouteTests(unittest.TestCase):
         self.assertIn(payload["state"]["target_word"], payload["state"]["board"])
         self.assertEqual(payload["state"]["vocabulary_name"], default_pack.file_path.name)
         self.assertEqual(payload["state"]["total_vocabulary"], default_pack.word_count)
+        self.assertIn("persistence", payload["state"])
+        self.assertIn("run_saved", payload["state"]["persistence"])
 
     def test_turn_endpoint_returns_structured_turn_payload(self) -> None:
         with patch.object(app_module, "RANKER", DummyRanker()):
@@ -189,6 +197,7 @@ class AppRouteTests(unittest.TestCase):
                 self.assertIn("state", payload)
                 self.assertIn("ranked_board", payload)
                 self.assertIn("new_board", payload)
+                self.assertIn("persistence", payload["state"])
 
     def test_restriction_turn_rejects_local_rule_and_adds_a_strike(self) -> None:
         with self.client as client:

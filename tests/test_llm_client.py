@@ -5,6 +5,7 @@ from unittest.mock import patch
 import llm_client as llm_module
 from llm_client import (
     BlocksCandidate,
+    FakeRanker,
     GeminiRanker,
     HeuristicRanker,
     OpenAICompatibleRanker,
@@ -19,6 +20,7 @@ from llm_client import (
     parse_word_scoring,
     run_startup_probe,
 )
+from semantic_cache import MemorySemanticCache
 
 
 class FakeGeminiResponse:
@@ -131,6 +133,37 @@ class StatusFailingPrimary:
 
     def score_words_against_clue(self, clue, words):
         return self.rank_words(clue, words)
+
+
+class CountingPrimary:
+    provider = "counting-primary"
+    model_name = "counting-model"
+
+    def __init__(self) -> None:
+        self.rank_calls = 0
+
+    def rank_words(self, clue, words):
+        self.rank_calls += 1
+        return list(reversed(words))
+
+    def judge_restricted_clue(self, rule_text, clue, words):
+        return (True, "ok", self.rank_words(clue, words))
+
+    def score_words_against_clue(self, clue, words):
+        ranked = self.rank_words(clue, words)
+        return [
+            llm_module.WordScore(word=word, score=max(0, 100 - index * 25))
+            for index, word in enumerate(ranked)
+        ]
+
+    def pick_blocks_primary_candidate(self, clue, candidates):
+        return candidates[-1].candidate_id
+
+    def score_blocks_candidates(self, clue, candidates):
+        return [
+            llm_module.BlocksCandidateScore(candidate_id=candidate.candidate_id, score=100 - index * 10)
+            for index, candidate in enumerate(candidates)
+        ]
 
 
 class LLMClientTests(unittest.TestCase):
@@ -302,7 +335,7 @@ class LLMClientTests(unittest.TestCase):
         result = ranker.rank_words("boat", ["Anchor", "Harbor", "Orbit"])
 
         self.assertTrue(result.used_fallback)
-        self.assertEqual(result.provider, "heuristic-fallback")
+        self.assertEqual(result.provider, "semantic-fallback")
         self.assertIn("provider exploded", result.warning)
 
     def test_resilient_ranker_restriction_judge_falls_back_to_bonusless_pass(self) -> None:
@@ -321,7 +354,7 @@ class LLMClientTests(unittest.TestCase):
         result = ranker.score_words_against_clue("boat", ["Anchor", "Harbor", "Orbit"])
 
         self.assertTrue(result.used_fallback)
-        self.assertEqual(result.provider, "heuristic-fallback")
+        self.assertEqual(result.provider, "semantic-fallback")
         self.assertEqual(len(result.scored_words), 3)
 
     def test_resilient_ranker_blocks_primary_falls_back_when_primary_fails(self) -> None:
@@ -368,6 +401,32 @@ class LLMClientTests(unittest.TestCase):
 
         self.assertLess(unrelated_score, 75)
         self.assertEqual(exact_score, 100)
+
+    def test_resilient_ranker_uses_fake_ranker_when_enabled(self) -> None:
+        with patch.dict(os.environ, {"SEMANTRIS_USE_FAKE_RANKER": "1"}, clear=True):
+            ranker = build_ranker_from_env("gemini")
+
+        self.assertIsInstance(ranker.primary, FakeRanker)
+
+        result = ranker.rank_words("anchor", ["Anchor", "Harbor", "Orbit"])
+        self.assertFalse(result.used_fallback)
+        self.assertEqual(result.provider, "fake-ranker")
+        self.assertEqual(result.ranked_words[0], "Anchor")
+
+    def test_resilient_ranker_caches_primary_successes(self) -> None:
+        primary = CountingPrimary()
+        ranker = ResilientRanker(
+            primary=primary,
+            cache=MemorySemanticCache(max_entries=8),
+        )
+
+        first = ranker.rank_words("boat", ["Anchor", "Harbor", "Orbit"])
+        second = ranker.rank_words("boat", ["Anchor", "Harbor", "Orbit"])
+
+        self.assertEqual(primary.rank_calls, 1)
+        self.assertEqual(first.ranked_words, ["Orbit", "Harbor", "Anchor"])
+        self.assertEqual(second.ranked_words, ["Orbit", "Harbor", "Anchor"])
+        self.assertEqual(second.provider, "counting-primary/cache")
 
     def test_build_ranker_from_env_warns_when_gemini_api_key_is_missing(self) -> None:
         with patch.dict(os.environ, {}, clear=True):

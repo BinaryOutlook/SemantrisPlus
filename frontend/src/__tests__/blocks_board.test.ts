@@ -47,6 +47,12 @@ function buildState(): BlocksState {
       { cell: 1, word: "Anchor", score: 100 },
       { cell: 2, word: "Harbor", score: 80 },
     ],
+    persistence: {
+      run_record_id: null,
+      run_saved: false,
+      is_new_best: false,
+      best_run: null,
+    },
   };
 }
 
@@ -59,6 +65,8 @@ describe("renderBlocksGrid", () => {
 
     expect(blocksGrid.children).toHaveLength(4);
     expect(blocksGrid.querySelectorAll(".blocks-cell--filled")).toHaveLength(2);
-    expect(blocksGrid.querySelector(".blocks-cell--primary")?.getAttribute("data-word")).toBe("Anchor");
+    expect(blocksGrid.querySelector(".blocks-cell--primary")?.getAttribute("data-word")).toBe(
+      "Anchor"
+    );
   });
 });

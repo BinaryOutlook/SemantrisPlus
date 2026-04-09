@@ -5,7 +5,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Sequence
 
-from dotenv import load_dotenv
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
 
 from game_logic import (
@@ -41,17 +40,18 @@ from llm_client import (
     normalize_word,
     run_startup_probe,
 )
+from persistence import BestRunSummary, RunStore, build_run_store
+from settings import Settings, get_settings
 
-load_dotenv()
-
-BASE_DIR = Path(__file__).resolve().parent
-ASSETS_DIR = BASE_DIR / "assets"
-DEFAULT_VOCAB_FILE = ASSETS_DIR / "aviation_1.txt"
-RESTRICTION_RULES_FILE = ASSETS_DIR / "restriction_rules.json"
-CONFIGURED_VOCAB_FILE = Path(os.getenv("SEMANTRIS_VOCAB_FILE", str(DEFAULT_VOCAB_FILE)))
+SETTINGS = get_settings()
+BASE_DIR = SETTINGS.base_dir
+ASSETS_DIR = SETTINGS.assets_dir
+DEFAULT_VOCAB_FILE = SETTINGS.default_vocab_file
+RESTRICTION_RULES_FILE = SETTINGS.restriction_rules_file
+CONFIGURED_VOCAB_FILE = SETTINGS.configured_vocab_file
 SELECTED_PACK_SESSION_KEY = "selected_pack_id"
 SELECTED_MODE_SESSION_KEY = "selected_mode_id"
-ACTIVE_LLM_PROVIDER = os.getenv("SEMANTRIS_LLM_PROVIDER", "gemini").strip().lower()
+ACTIVE_LLM_PROVIDER = SETTINGS.semantris_llm_provider
 
 MODE_IDS = {
     "iteration": "iteration",
@@ -68,10 +68,13 @@ BLOCKS_PRIMARY_BATCH_SIZE = 8
 BLOCKS_SCORING_BATCH_SIZE = 6
 
 app = Flask(__name__)
-app.secret_key = os.getenv("FLASK_SECRET_KEY") or os.urandom(24)
+app.secret_key = SETTINGS.flask_secret_key or os.urandom(24)
+RUN_STORE = build_run_store(SETTINGS)
 
 
 def _env_flag(name: str) -> bool:
+    if name == "SEMANTRIS_DEBUG_BLOCKS_LLM":
+        return SETTINGS.semantris_debug_blocks_llm
     return os.getenv(name, "0").strip().lower() in {"1", "true", "yes", "on"}
 
 
@@ -200,7 +203,7 @@ VOCABULARY_CATALOG = build_vocabulary_catalog(ASSETS_DIR)
 DEFAULT_VOCAB_PACK_ID = resolve_default_pack_id(VOCABULARY_CATALOG)
 RESTRICTION_RULES = load_restriction_rules(RESTRICTION_RULES_FILE)
 RESTRICTION_RULES_BY_ID = {rule.rule_id: rule for rule in RESTRICTION_RULES}
-RANKER = build_ranker_from_env(provider_name=ACTIVE_LLM_PROVIDER)
+RANKER = build_ranker_from_env(provider_name=ACTIVE_LLM_PROVIDER, settings=SETTINGS)
 
 
 def selected_pack_id_from_session() -> str:
@@ -246,6 +249,78 @@ def _game_result_for_state(state: dict[str, Any]) -> str | None:
     return None
 
 
+def _elapsed_seconds_for_state(state: dict[str, Any]) -> int:
+    started_at_ms = int(state.get("started_at_ms", 0) or 0)
+    ended_at_ms = int(state.get("ended_at_ms", started_at_ms) or started_at_ms)
+    return max(0, round((ended_at_ms - started_at_ms) / 1000))
+
+
+def _best_run_payload(summary: BestRunSummary | None) -> dict[str, Any] | None:
+    if summary is None:
+        return None
+    return {
+        "run_record_id": summary.run_record_id,
+        "score": summary.score,
+        "turns": summary.turns,
+        "elapsed_seconds": summary.elapsed_seconds,
+        "created_at": summary.created_at_iso,
+    }
+
+
+def _state_with_persistence_metadata(
+    state: dict[str, Any],
+    *,
+    mode_id: str,
+    pack: VocabularyPack,
+) -> dict[str, Any]:
+    updated_state = dict(state)
+    updated_state.setdefault("persisted_run_id", None)
+    updated_state.setdefault("persisted_run_is_new_best", False)
+    if "best_run_summary" not in updated_state:
+        updated_state["best_run_summary"] = _best_run_payload(
+            RUN_STORE.best_run_for(mode_id=mode_id, pack_id=pack.pack_id)
+        )
+    return updated_state
+
+
+def _persist_completed_run_if_needed(
+    state: dict[str, Any],
+    *,
+    mode_id: str,
+    pack: VocabularyPack,
+) -> dict[str, Any]:
+    updated_state = _state_with_persistence_metadata(state, mode_id=mode_id, pack=pack)
+    if not updated_state.get("game_over"):
+        return updated_state
+    if updated_state.get("persisted_run_id") is not None:
+        return updated_state
+
+    recorded = RUN_STORE.record_completed_run(
+        mode_id=mode_id,
+        pack_id=pack.pack_id,
+        vocabulary_name=pack.file_path.name,
+        score=int(updated_state.get("score", 0) or 0),
+        turns=int(updated_state.get("turn_count", 0) or 0),
+        elapsed_seconds=_elapsed_seconds_for_state(updated_state),
+        game_result=_game_result_for_state(updated_state) or "win",
+        provider_label=updated_state.get("last_provider"),
+        used_fallback=bool(updated_state.get("used_fallback", False)),
+    )
+    updated_state["persisted_run_id"] = recorded.run_record_id
+    updated_state["persisted_run_is_new_best"] = recorded.is_new_best
+    updated_state["best_run_summary"] = _best_run_payload(recorded.best_run)
+    return updated_state
+
+
+def _persistence_payload(state: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "run_record_id": state.get("persisted_run_id"),
+        "run_saved": state.get("persisted_run_id") is not None,
+        "is_new_best": bool(state.get("persisted_run_is_new_best", False)),
+        "best_run": state.get("best_run_summary"),
+    }
+
+
 def serialize_iteration_state(state: dict[str, Any], pack: VocabularyPack) -> dict[str, Any]:
     board_words = words_for_indices(state["board_indices"], pack.words)
     target_index = state.get("target_index")
@@ -276,6 +351,7 @@ def serialize_iteration_state(state: dict[str, Any], pack: VocabularyPack) -> di
         "seen_words": pack.word_count - remaining_words,
         "total_vocabulary": pack.word_count,
         "run_exhausted": remaining_words == 0,
+        "persistence": _persistence_payload(state),
     }
 
 
@@ -339,6 +415,7 @@ def serialize_blocks_state(state: dict[str, Any], pack: VocabularyPack) -> dict[
         "last_chain_words": words_for_indices(list(state.get("last_chain_indices", [])), pack.words),
         "last_chain_size": state.get("last_chain_size", 0),
         "last_scored_cells": last_scored_cells,
+        "persistence": _persistence_payload(state),
     }
 
 
@@ -361,6 +438,7 @@ def initialize_iteration_session(pack: VocabularyPack | None = None) -> dict[str
         "mode_id": MODE_IDS["iteration"],
         "game_result": None,
     }
+    state = _state_with_persistence_metadata(state, mode_id=MODE_IDS["iteration"], pack=pack)
     _commit_session_state(pack, MODE_IDS["iteration"], state)
     return state
 
@@ -372,6 +450,7 @@ def initialize_restriction_session(pack: VocabularyPack | None = None) -> dict[s
         vocabulary_name=pack.file_path.name,
         rules=RESTRICTION_RULES,
     )
+    state = _state_with_persistence_metadata(state, mode_id=MODE_IDS["restriction"], pack=pack)
     _commit_session_state(pack, MODE_IDS["restriction"], state)
     return state
 
@@ -382,6 +461,7 @@ def initialize_blocks_session(pack: VocabularyPack | None = None) -> dict[str, A
         vocabulary_size=pack.word_count,
         vocabulary_name=pack.file_path.name,
     )
+    state = _state_with_persistence_metadata(state, mode_id=MODE_IDS["blocks"], pack=pack)
     _commit_session_state(pack, MODE_IDS["blocks"], state)
     return state
 
@@ -423,7 +503,10 @@ def _current_mode_state(mode_id: str) -> dict[str, Any]:
     session_state = dict(session)
     if not _mode_state_matches(session_state, mode_id, pack):
         return _initialize_mode_session(mode_id, pack)
-    return session_state
+    finalized_state = _persist_completed_run_if_needed(session_state, mode_id=mode_id, pack=pack)
+    if finalized_state != session_state:
+        _commit_session_state(pack, mode_id, finalized_state)
+    return finalized_state
 
 
 def current_state() -> dict[str, Any]:
@@ -743,6 +826,11 @@ def game_turn() -> Any:
         "last_warning": ranking.warning,
         "last_clue": clue,
     }
+    updated_state = _persist_completed_run_if_needed(
+        updated_state,
+        mode_id=MODE_IDS["iteration"],
+        pack=pack,
+    )
 
     _commit_session_state(pack, MODE_IDS["iteration"], updated_state)
 
@@ -880,6 +968,12 @@ def restriction_turn() -> Any:
             "last_clue": clue,
         }
 
+    updated_state = _persist_completed_run_if_needed(
+        updated_state,
+        mode_id=MODE_IDS["restriction"],
+        pack=pack,
+    )
+
     _commit_session_state(pack, MODE_IDS["restriction"], updated_state)
 
     return jsonify(
@@ -1002,6 +1096,11 @@ def blocks_turn() -> Any:
         "last_warning": _join_warnings(primary_choice.warning, scoring.warning),
         "last_clue": clue,
     }
+    updated_state = _persist_completed_run_if_needed(
+        updated_state,
+        mode_id=MODE_IDS["blocks"],
+        pack=pack,
+    )
 
     _commit_session_state(pack, MODE_IDS["blocks"], updated_state)
 
@@ -1080,7 +1179,7 @@ def _build_blocks_turn_message(turn: Any) -> str:
 
 
 def should_run_startup_probe(debug_mode: bool) -> bool:
-    if os.getenv("SEMANTRIS_SKIP_LLM_STARTUP_PROBE", "0") == "1":
+    if os.getenv("SEMANTRIS_SKIP_LLM_STARTUP_PROBE", "1" if SETTINGS.semantris_skip_llm_startup_probe else "0") == "1":
         return False
 
     if not debug_mode:
@@ -1090,8 +1189,8 @@ def should_run_startup_probe(debug_mode: bool) -> bool:
 
 
 if __name__ == "__main__":
-    debug_mode = os.getenv("FLASK_DEBUG", "1") == "1"
-    port = int(os.getenv("PORT", "5001"))
+    debug_mode = SETTINGS.flask_debug
+    port = SETTINGS.port
 
     if should_run_startup_probe(debug_mode):
         print(format_startup_probe_message(run_startup_probe(RANKER)), flush=True)

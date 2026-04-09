@@ -1,3 +1,5 @@
+import type { PersistenceSummary } from "./types";
+
 export interface BlocksCell {
   cell: number;
   row: number;
@@ -37,6 +39,7 @@ export interface BlocksState {
   last_chain_words: string[];
   last_chain_size: number;
   last_scored_cells: ScoredBlockCell[];
+  persistence: PersistenceSummary;
 }
 
 export interface BlocksStateResponse {

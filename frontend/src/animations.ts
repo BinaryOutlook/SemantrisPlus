@@ -1,13 +1,13 @@
 import { applyWordClasses, createWordElement, renderBoard } from "./board";
 import type { GameElements } from "./dom";
-import type { BoardTransitionOptions, BoardState } from "./types";
+import type { BoardState, BoardTransitionOptions } from "./types";
 
 export async function animateBoardTransition(
   elements: Pick<GameElements, "tower">,
   nextBoard: string[],
   boardState: BoardState,
   options: BoardTransitionOptions = {},
-  prefersReducedMotion: boolean,
+  prefersReducedMotion: boolean
 ): Promise<void> {
   if (prefersReducedMotion) {
     renderBoard(elements, nextBoard, boardState);
@@ -66,13 +66,14 @@ export async function animateBoardTransition(
               {
                 duration,
                 easing: "cubic-bezier(0.22, 1, 0.36, 1)",
-              },
+              }
             )
-            .finished.catch(() => undefined),
+            .finished.catch(() => undefined)
         );
       }
     } else if (spawnedWords.has(word)) {
-      const startTranslate = spawnFrom === "bottom" ? "translateY(120px) scale(0.94)" : "translateY(-120px) scale(0.94)";
+      const startTranslate =
+        spawnFrom === "bottom" ? "translateY(120px) scale(0.94)" : "translateY(-120px) scale(0.94)";
       animations.push(
         element
           .animate(
@@ -83,9 +84,9 @@ export async function animateBoardTransition(
             {
               duration: spawnDuration,
               easing: "cubic-bezier(0.16, 1, 0.3, 1)",
-            },
+            }
           )
-          .finished.catch(() => undefined),
+          .finished.catch(() => undefined)
       );
     }
   });
@@ -97,7 +98,7 @@ export async function animateBoardTransition(
 
 export function spawnBurst(
   elements: Pick<GameElements, "towerStage" | "effectsLayer">,
-  element: HTMLElement,
+  element: HTMLElement
 ): void {
   const stageRect = elements.towerStage.getBoundingClientRect();
   const rect = element.getBoundingClientRect();
@@ -113,7 +114,7 @@ export async function explodeWords(
   elements: Pick<GameElements, "tower" | "towerStage" | "effectsLayer">,
   wordsToRemove: string[],
   duration: number,
-  prefersReducedMotion: boolean,
+  prefersReducedMotion: boolean
 ): Promise<void> {
   if (!wordsToRemove.length || prefersReducedMotion) {
     return;
@@ -140,9 +141,9 @@ export async function explodeWords(
             duration,
             easing: "cubic-bezier(0.19, 1, 0.22, 1)",
             fill: "forwards",
-          },
+          }
         )
-        .finished.catch(() => undefined),
+        .finished.catch(() => undefined)
     );
   });
 

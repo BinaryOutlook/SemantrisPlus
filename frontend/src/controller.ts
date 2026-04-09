@@ -1,5 +1,5 @@
-import { createNewGame, loadGameState, submitClueTurn } from "./api";
 import { animateBoardTransition, explodeWords } from "./animations";
+import { createNewGame, loadGameState, submitClueTurn } from "./api";
 import { renderBoard, syncStageMetrics } from "./board";
 import type { GameElements } from "./dom";
 import { setBusy, setStatus, updateHud } from "./hud";
@@ -40,7 +40,7 @@ export function initGameController(elements: GameElements): void {
         result.ranked_board,
         rankedState,
         { duration: animationTimings.miss },
-        prefersReducedMotion,
+        prefersReducedMotion
       );
       syncStageMetrics(elements, result.state);
       updateHud(elements, clientState, result.state);
@@ -53,10 +53,15 @@ export function initGameController(elements: GameElements): void {
       result.ranked_board,
       rankedState,
       { duration: animationTimings.reorder },
-      prefersReducedMotion,
+      prefersReducedMotion
     );
     await wait(animationTimings.handoff);
-    await explodeWords(elements, result.words_removed, animationTimings.explode, prefersReducedMotion);
+    await explodeWords(
+      elements,
+      result.words_removed,
+      animationTimings.explode,
+      prefersReducedMotion
+    );
     await animateBoardTransition(
       elements,
       result.new_board,
@@ -66,7 +71,7 @@ export function initGameController(elements: GameElements): void {
         spawnDuration: animationTimings.settle,
         spawnedWords: result.spawned_words,
       },
-      prefersReducedMotion,
+      prefersReducedMotion
     );
     syncStageMetrics(elements, result.state);
     updateHud(elements, clientState, result.state);

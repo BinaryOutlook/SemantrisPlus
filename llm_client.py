@@ -10,6 +10,9 @@ from typing import Any, Protocol, Sequence
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
+from semantic_cache import NullSemanticCache, SemanticCache, build_cache_key, build_semantic_cache
+from settings import Settings
+
 try:
     from google import genai
 except Exception:  # pragma: no cover - import safety only
@@ -19,6 +22,11 @@ try:
     from openai import OpenAI
 except Exception:  # pragma: no cover - import safety only
     OpenAI = None
+
+try:
+    from rapidfuzz import fuzz
+except Exception:  # pragma: no cover - import safety only
+    fuzz = None
 
 
 RANKING_SYSTEM_PROMPT = """
@@ -1269,23 +1277,200 @@ class HeuristicRanker:
         ]
 
 
+class SemanticFallbackRanker:
+    provider = "semantic-fallback"
+
+    @property
+    def model_name(self) -> str:
+        return "local-semantic-fallback"
+
+    def _token_overlap_score(self, clue_normalized: str, word_normalized: str) -> float:
+        clue_tokens = set(re.findall(r"[a-z0-9]+", clue_normalized))
+        word_tokens = set(re.findall(r"[a-z0-9]+", word_normalized))
+        if not clue_tokens or not word_tokens:
+            return 0.0
+        return len(clue_tokens & word_tokens) / len(clue_tokens | word_tokens)
+
+    def _fuzzy_ratio(self, clue_normalized: str, word_normalized: str) -> float:
+        if fuzz is None:
+            return SequenceMatcher(None, clue_normalized, word_normalized).ratio()
+        return max(
+            fuzz.ratio(clue_normalized, word_normalized) / 100.0,
+            fuzz.partial_ratio(clue_normalized, word_normalized) / 100.0,
+            fuzz.token_set_ratio(clue_normalized, word_normalized) / 100.0,
+        )
+
+    def _score(self, clue: str, word: str) -> float:
+        clue_normalized = normalize_word(clue)
+        word_normalized = normalize_word(word)
+        if not clue_normalized or not word_normalized:
+            return 0.0
+        if clue_normalized == word_normalized:
+            return 10_000.0
+
+        substring_bonus = 0.25 if clue_normalized in word_normalized or word_normalized in clue_normalized else 0.0
+        token_overlap = self._token_overlap_score(clue_normalized, word_normalized)
+        fuzzy_ratio = self._fuzzy_ratio(clue_normalized, word_normalized)
+        sequence_ratio = SequenceMatcher(None, clue_normalized, word_normalized).ratio()
+
+        return (
+            token_overlap * 5.0
+            + fuzzy_ratio * 3.0
+            + sequence_ratio * 1.5
+            + substring_bonus
+        )
+
+    def rank_words(self, clue: str, words: Sequence[str]) -> list[str]:
+        return sorted(
+            words,
+            key=lambda word: (self._score(clue, word), normalize_word(word)),
+            reverse=True,
+        )
+
+    def score_words_against_clue(self, clue: str, words: Sequence[str]) -> list[WordScore]:
+        ranked_words = self.rank_words(clue, words)
+        if not ranked_words:
+            return []
+
+        if len(ranked_words) == 1:
+            return [WordScore(word=ranked_words[0], score=100)]
+
+        best_score = max(self._score(clue, word) for word in ranked_words) or 1.0
+        return [
+            WordScore(
+                word=word,
+                score=max(0, min(100, round((self._score(clue, word) / best_score) * 100))),
+            )
+            for word in ranked_words
+        ]
+
+    def pick_blocks_primary_candidate(
+        self,
+        clue: str,
+        candidates: Sequence[BlocksCandidate],
+    ) -> int:
+        if not candidates:
+            raise RankingError("No block candidates were provided.")
+        ranked_candidates = sorted(
+            candidates,
+            key=lambda candidate: (self._score(clue, candidate.word), candidate.candidate_id),
+            reverse=True,
+        )
+        return ranked_candidates[0].candidate_id
+
+    def score_blocks_candidates(
+        self,
+        clue: str,
+        candidates: Sequence[BlocksCandidate],
+    ) -> list[BlocksCandidateScore]:
+        scored = [
+            BlocksCandidateScore(
+                candidate_id=candidate.candidate_id,
+                score=max(0, min(100, round(self._score(clue, candidate.word) * 18))),
+            )
+            for candidate in candidates
+        ]
+        return scored
+
+
+class FakeRanker:
+    provider = "fake-ranker"
+
+    def __init__(self) -> None:
+        self._fallback = SemanticFallbackRanker()
+
+    @property
+    def model_name(self) -> str:
+        return "semantris-fake-ranker"
+
+    def rank_words(self, clue: str, words: Sequence[str]) -> list[str]:
+        return self._fallback.rank_words(clue, words)
+
+    def judge_restricted_clue(
+        self,
+        rule_text: str,
+        clue: str,
+        words: Sequence[str],
+    ) -> tuple[bool, str, list[str] | None]:
+        return (
+            True,
+            "Fake ranker accepted the clue for deterministic testing.",
+            self.rank_words(clue, words),
+        )
+
+    def score_words_against_clue(self, clue: str, words: Sequence[str]) -> list[WordScore]:
+        return self._fallback.score_words_against_clue(clue, words)
+
+    def pick_blocks_primary_candidate(
+        self,
+        clue: str,
+        candidates: Sequence[BlocksCandidate],
+    ) -> int:
+        return self._fallback.pick_blocks_primary_candidate(clue, candidates)
+
+    def score_blocks_candidates(
+        self,
+        clue: str,
+        candidates: Sequence[BlocksCandidate],
+    ) -> list[BlocksCandidateScore]:
+        return self._fallback.score_blocks_candidates(clue, candidates)
+
+
 class ResilientRanker:
     def __init__(
         self,
         primary: PrimaryRanker | None,
+        semantic_fallback: SemanticFallbackRanker | None = None,
         fallback: HeuristicRanker | None = None,
+        cache: SemanticCache | None = None,
         initial_warning: str | None = None,
     ) -> None:
         self.primary = primary
+        self.semantic_fallback = semantic_fallback or SemanticFallbackRanker()
         self.fallback = fallback or HeuristicRanker()
+        self.cache = cache or NullSemanticCache()
         self.initial_warning = initial_warning
+
+    def _cache_payload(self, *, provider: str, data: Any) -> dict[str, Any]:
+        return {
+            "provider": provider,
+            "data": data,
+        }
+
+    def _cache_hit_provider(self, provider: str) -> str:
+        return f"{provider}/cache"
+
+    def _cache_key(self, operation: str, payload: dict[str, Any]) -> str:
+        return build_cache_key(operation, payload)
 
     def rank_words(self, clue: str, words: Sequence[str]) -> RankingResult:
         start = time.perf_counter()
+        cache_key = self._cache_key(
+            "rank_words",
+            {
+                "clue": normalize_word(clue),
+                "words": [normalize_word(word) for word in words],
+            },
+        )
+
+        if self.primary is not None:
+            cached = self.cache.get(cache_key)
+            if isinstance(cached, dict) and isinstance(cached.get("data"), list):
+                latency_ms = round((time.perf_counter() - start) * 1000)
+                return RankingResult(
+                    ranked_words=list(cached["data"]),
+                    latency_ms=latency_ms,
+                    provider=self._cache_hit_provider(str(cached.get("provider", self.primary.provider))),
+                    used_fallback=False,
+                )
 
         if self.primary is not None:
             try:
                 ranked_words = self.primary.rank_words(clue, words)
+                self.cache.set(
+                    cache_key,
+                    self._cache_payload(provider=self.primary.provider, data=list(ranked_words)),
+                )
                 latency_ms = round((time.perf_counter() - start) * 1000)
                 return RankingResult(
                     ranked_words=ranked_words,
@@ -1294,34 +1479,53 @@ class ResilientRanker:
                     used_fallback=False,
                 )
             except Exception as exc:
-                fallback_words = self.fallback.rank_words(clue, words)
-                latency_ms = round((time.perf_counter() - start) * 1000)
-                return RankingResult(
-                    ranked_words=fallback_words,
-                    latency_ms=latency_ms,
-                    provider=self.fallback.provider,
-                    used_fallback=True,
-                    warning=(
-                        "Primary ranking provider failed. "
-                        + format_provider_diagnostic(
-                            exc,
-                            provider=getattr(self.primary, "provider", "primary"),
-                            stage="ranking",
-                            context=_provider_context(self.primary),
-                        )
-                    ),
-                )
+                try:
+                    fallback_words = self.semantic_fallback.rank_words(clue, words)
+                    latency_ms = round((time.perf_counter() - start) * 1000)
+                    return RankingResult(
+                        ranked_words=fallback_words,
+                        latency_ms=latency_ms,
+                        provider=self.semantic_fallback.provider,
+                        used_fallback=True,
+                        warning=(
+                            "Primary ranking provider failed, so the semantic fallback ranker was used. "
+                            + format_provider_diagnostic(
+                                exc,
+                                provider=getattr(self.primary, "provider", "primary"),
+                                stage="ranking",
+                                context=_provider_context(self.primary),
+                            )
+                        ),
+                    )
+                except Exception:
+                    fallback_words = self.fallback.rank_words(clue, words)
+                    latency_ms = round((time.perf_counter() - start) * 1000)
+                    return RankingResult(
+                        ranked_words=fallback_words,
+                        latency_ms=latency_ms,
+                        provider=self.fallback.provider,
+                        used_fallback=True,
+                        warning=(
+                            "Primary ranking provider failed, so the heuristic fallback ranker was used. "
+                            + format_provider_diagnostic(
+                                exc,
+                                provider=getattr(self.primary, "provider", "primary"),
+                                stage="ranking",
+                                context=_provider_context(self.primary),
+                            )
+                        ),
+                    )
 
-        fallback_words = self.fallback.rank_words(clue, words)
+        fallback_words = self.semantic_fallback.rank_words(clue, words)
         latency_ms = round((time.perf_counter() - start) * 1000)
         return RankingResult(
             ranked_words=fallback_words,
             latency_ms=latency_ms,
-            provider=self.fallback.provider,
+            provider=self.semantic_fallback.provider,
             used_fallback=True,
             warning=(
                 self.initial_warning
-                or "Primary provider is not configured, so the local fallback ranker was used."
+                or "Primary provider is not configured, so the local semantic fallback ranker was used."
             ),
         )
 
@@ -1332,6 +1536,28 @@ class ResilientRanker:
         words: Sequence[str],
     ) -> RuleJudgeResult:
         start = time.perf_counter()
+        cache_key = self._cache_key(
+            "judge_restricted_clue",
+            {
+                "rule_text": rule_text.strip().casefold(),
+                "clue": normalize_word(clue),
+                "words": [normalize_word(word) for word in words],
+            },
+        )
+
+        if self.primary is not None:
+            cached = self.cache.get(cache_key)
+            if isinstance(cached, dict) and isinstance(cached.get("data"), dict):
+                payload = cached["data"]
+                latency_ms = round((time.perf_counter() - start) * 1000)
+                return RuleJudgeResult(
+                    rule_passed=bool(payload["rule_passed"]),
+                    short_reason=str(payload["short_reason"]),
+                    ranked_words=list(payload["ranked_words"]) if payload["ranked_words"] is not None else None,
+                    latency_ms=latency_ms,
+                    provider=self._cache_hit_provider(str(cached.get("provider", self.primary.provider))),
+                    used_fallback=False,
+                )
 
         if self.primary is not None:
             try:
@@ -1339,6 +1565,17 @@ class ResilientRanker:
                     rule_text,
                     clue,
                     words,
+                )
+                self.cache.set(
+                    cache_key,
+                    self._cache_payload(
+                        provider=self.primary.provider,
+                        data={
+                            "rule_passed": rule_passed,
+                            "short_reason": short_reason,
+                            "ranked_words": list(ranked_words) if ranked_words is not None else None,
+                        },
+                    ),
                 )
                 latency_ms = round((time.perf_counter() - start) * 1000)
                 return RuleJudgeResult(
@@ -1350,17 +1587,17 @@ class ResilientRanker:
                     used_fallback=False,
                 )
             except Exception as exc:
-                fallback_words = self.fallback.rank_words(clue, words)
+                fallback_words = self.semantic_fallback.rank_words(clue, words)
                 latency_ms = round((time.perf_counter() - start) * 1000)
                 return RuleJudgeResult(
                     rule_passed=True,
                     short_reason="Restriction check unavailable, so this turn used fallback ranking without a bonus.",
                     ranked_words=fallback_words,
                     latency_ms=latency_ms,
-                    provider=self.fallback.provider,
+                    provider=self.semantic_fallback.provider,
                     used_fallback=True,
                     warning=(
-                        "Primary restriction judge failed. "
+                        "Primary restriction judge failed, so the semantic fallback ranker was used. "
                         + format_provider_diagnostic(
                             exc,
                             provider=getattr(self.primary, "provider", "primary"),
@@ -1370,27 +1607,55 @@ class ResilientRanker:
                     ),
                 )
 
-        fallback_words = self.fallback.rank_words(clue, words)
+        fallback_words = self.semantic_fallback.rank_words(clue, words)
         latency_ms = round((time.perf_counter() - start) * 1000)
         return RuleJudgeResult(
             rule_passed=True,
             short_reason="Restriction check unavailable, so this turn used fallback ranking without a bonus.",
             ranked_words=fallback_words,
             latency_ms=latency_ms,
-            provider=self.fallback.provider,
+            provider=self.semantic_fallback.provider,
             used_fallback=True,
             warning=(
                 self.initial_warning
-                or "Primary provider is not configured, so the local fallback ranker was used."
+                or "Primary provider is not configured, so the local semantic fallback ranker was used."
             ),
         )
 
     def score_words_against_clue(self, clue: str, words: Sequence[str]) -> WordScoringResult:
         start = time.perf_counter()
+        cache_key = self._cache_key(
+            "score_words_against_clue",
+            {
+                "clue": normalize_word(clue),
+                "words": [normalize_word(word) for word in words],
+            },
+        )
+
+        if self.primary is not None:
+            cached = self.cache.get(cache_key)
+            if isinstance(cached, dict) and isinstance(cached.get("data"), list):
+                latency_ms = round((time.perf_counter() - start) * 1000)
+                return WordScoringResult(
+                    scored_words=[
+                        WordScore(word=str(item["word"]), score=int(item["score"]))
+                        for item in cached["data"]
+                    ],
+                    latency_ms=latency_ms,
+                    provider=self._cache_hit_provider(str(cached.get("provider", self.primary.provider))),
+                    used_fallback=False,
+                )
 
         if self.primary is not None:
             try:
                 scored_words = self.primary.score_words_against_clue(clue, words)
+                self.cache.set(
+                    cache_key,
+                    self._cache_payload(
+                        provider=self.primary.provider,
+                        data=[{"word": item.word, "score": item.score} for item in scored_words],
+                    ),
+                )
                 latency_ms = round((time.perf_counter() - start) * 1000)
                 return WordScoringResult(
                     scored_words=scored_words,
@@ -1399,15 +1664,15 @@ class ResilientRanker:
                     used_fallback=False,
                 )
             except Exception as exc:
-                fallback_scores = self.fallback.score_words_against_clue(clue, words)
+                fallback_scores = self.semantic_fallback.score_words_against_clue(clue, words)
                 latency_ms = round((time.perf_counter() - start) * 1000)
                 return WordScoringResult(
                     scored_words=fallback_scores,
                     latency_ms=latency_ms,
-                    provider=self.fallback.provider,
+                    provider=self.semantic_fallback.provider,
                     used_fallback=True,
                     warning=(
-                        "Primary scoring provider failed. "
+                        "Primary scoring provider failed, so the semantic fallback ranker was used. "
                         + format_provider_diagnostic(
                             exc,
                             provider=getattr(self.primary, "provider", "primary"),
@@ -1417,16 +1682,16 @@ class ResilientRanker:
                     ),
                 )
 
-        fallback_scores = self.fallback.score_words_against_clue(clue, words)
+        fallback_scores = self.semantic_fallback.score_words_against_clue(clue, words)
         latency_ms = round((time.perf_counter() - start) * 1000)
         return WordScoringResult(
             scored_words=fallback_scores,
             latency_ms=latency_ms,
-            provider=self.fallback.provider,
+            provider=self.semantic_fallback.provider,
             used_fallback=True,
             warning=(
                 self.initial_warning
-                or "Primary provider is not configured, so the local fallback ranker was used."
+                or "Primary provider is not configured, so the local semantic fallback ranker was used."
             ),
         )
 
@@ -1436,10 +1701,35 @@ class ResilientRanker:
         candidates: Sequence[BlocksCandidate],
     ) -> BlocksPrimaryChoiceResult:
         start = time.perf_counter()
+        cache_key = self._cache_key(
+            "pick_blocks_primary_candidate",
+            {
+                "clue": normalize_word(clue),
+                "candidates": [
+                    {"candidate_id": candidate.candidate_id, "word": normalize_word(candidate.word)}
+                    for candidate in candidates
+                ],
+            },
+        )
+
+        if self.primary is not None:
+            cached = self.cache.get(cache_key)
+            if isinstance(cached, dict) and isinstance(cached.get("data"), int):
+                latency_ms = round((time.perf_counter() - start) * 1000)
+                return BlocksPrimaryChoiceResult(
+                    candidate_id=int(cached["data"]),
+                    latency_ms=latency_ms,
+                    provider=self._cache_hit_provider(str(cached.get("provider", self.primary.provider))),
+                    used_fallback=False,
+                )
 
         if self.primary is not None:
             try:
                 candidate_id = self.primary.pick_blocks_primary_candidate(clue, candidates)
+                self.cache.set(
+                    cache_key,
+                    self._cache_payload(provider=self.primary.provider, data=int(candidate_id)),
+                )
                 latency_ms = round((time.perf_counter() - start) * 1000)
                 return BlocksPrimaryChoiceResult(
                     candidate_id=candidate_id,
@@ -1448,15 +1738,15 @@ class ResilientRanker:
                     used_fallback=False,
                 )
             except Exception as exc:
-                fallback_candidate_id = self.fallback.pick_blocks_primary_candidate(clue, candidates)
+                fallback_candidate_id = self.semantic_fallback.pick_blocks_primary_candidate(clue, candidates)
                 latency_ms = round((time.perf_counter() - start) * 1000)
                 return BlocksPrimaryChoiceResult(
                     candidate_id=fallback_candidate_id,
                     latency_ms=latency_ms,
-                    provider=self.fallback.provider,
+                    provider=self.semantic_fallback.provider,
                     used_fallback=True,
                     warning=(
-                        "Primary blocks primary-choice provider failed. "
+                        "Primary blocks primary-choice provider failed, so the semantic fallback ranker was used. "
                         + format_provider_diagnostic(
                             exc,
                             provider=getattr(self.primary, "provider", "primary"),
@@ -1466,16 +1756,16 @@ class ResilientRanker:
                     ),
                 )
 
-        fallback_candidate_id = self.fallback.pick_blocks_primary_candidate(clue, candidates)
+        fallback_candidate_id = self.semantic_fallback.pick_blocks_primary_candidate(clue, candidates)
         latency_ms = round((time.perf_counter() - start) * 1000)
         return BlocksPrimaryChoiceResult(
             candidate_id=fallback_candidate_id,
             latency_ms=latency_ms,
-            provider=self.fallback.provider,
+            provider=self.semantic_fallback.provider,
             used_fallback=True,
             warning=(
                 self.initial_warning
-                or "Primary provider is not configured, so the local fallback ranker was used."
+                or "Primary provider is not configured, so the local semantic fallback ranker was used."
             ),
         )
 
@@ -1485,10 +1775,50 @@ class ResilientRanker:
         candidates: Sequence[BlocksCandidate],
     ) -> BlocksCandidateScoringResult:
         start = time.perf_counter()
+        cache_key = self._cache_key(
+            "score_blocks_candidates",
+            {
+                "clue": normalize_word(clue),
+                "candidates": [
+                    {"candidate_id": candidate.candidate_id, "word": normalize_word(candidate.word)}
+                    for candidate in candidates
+                ],
+            },
+        )
+
+        if self.primary is not None:
+            cached = self.cache.get(cache_key)
+            if isinstance(cached, dict) and isinstance(cached.get("data"), list):
+                latency_ms = round((time.perf_counter() - start) * 1000)
+                return BlocksCandidateScoringResult(
+                    scored_candidates=[
+                        BlocksCandidateScore(
+                            candidate_id=int(item["candidate_id"]),
+                            score=int(item["score"]),
+                        )
+                        for item in cached["data"]
+                    ],
+                    latency_ms=latency_ms,
+                    provider=self._cache_hit_provider(str(cached.get("provider", self.primary.provider))),
+                    used_fallback=False,
+                )
 
         if self.primary is not None:
             try:
                 scored_candidates = self.primary.score_blocks_candidates(clue, candidates)
+                self.cache.set(
+                    cache_key,
+                    self._cache_payload(
+                        provider=self.primary.provider,
+                        data=[
+                            {
+                                "candidate_id": item.candidate_id,
+                                "score": item.score,
+                            }
+                            for item in scored_candidates
+                        ],
+                    ),
+                )
                 latency_ms = round((time.perf_counter() - start) * 1000)
                 return BlocksCandidateScoringResult(
                     scored_candidates=scored_candidates,
@@ -1497,15 +1827,15 @@ class ResilientRanker:
                     used_fallback=False,
                 )
             except Exception as exc:
-                fallback_scores = self.fallback.score_blocks_candidates(clue, candidates)
+                fallback_scores = self.semantic_fallback.score_blocks_candidates(clue, candidates)
                 latency_ms = round((time.perf_counter() - start) * 1000)
                 return BlocksCandidateScoringResult(
                     scored_candidates=fallback_scores,
                     latency_ms=latency_ms,
-                    provider=self.fallback.provider,
+                    provider=self.semantic_fallback.provider,
                     used_fallback=True,
                     warning=(
-                        "Primary blocks scoring provider failed. "
+                        "Primary blocks scoring provider failed, so the semantic fallback ranker was used. "
                         + format_provider_diagnostic(
                             exc,
                             provider=getattr(self.primary, "provider", "primary"),
@@ -1515,27 +1845,28 @@ class ResilientRanker:
                     ),
                 )
 
-        fallback_scores = self.fallback.score_blocks_candidates(clue, candidates)
+        fallback_scores = self.semantic_fallback.score_blocks_candidates(clue, candidates)
         latency_ms = round((time.perf_counter() - start) * 1000)
         return BlocksCandidateScoringResult(
             scored_candidates=fallback_scores,
             latency_ms=latency_ms,
-            provider=self.fallback.provider,
+            provider=self.semantic_fallback.provider,
             used_fallback=True,
             warning=(
                 self.initial_warning
-                or "Primary provider is not configured, so the local fallback ranker was used."
+                or "Primary provider is not configured, so the local semantic fallback ranker was used."
             ),
         )
 
 
-def _build_gemini_ranker_from_env() -> ResilientRanker:
-    api_key = os.getenv("GEMINI_API_KEY")
-    model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
+def _build_gemini_ranker_from_settings(settings: Settings, cache: SemanticCache) -> ResilientRanker:
+    api_key = settings.gemini_api_key
+    model_name = settings.gemini_model
 
     if not api_key:
         return ResilientRanker(
             primary=None,
+            cache=cache,
             initial_warning=(
                 "Gemini mode is not configured because GEMINI_API_KEY is missing, "
                 "so the local fallback ranker was used. "
@@ -1549,10 +1880,11 @@ def _build_gemini_ranker_from_env() -> ResilientRanker:
 
     try:
         primary = GeminiRanker(api_key=api_key, model_name=model_name)
-        return ResilientRanker(primary=primary)
+        return ResilientRanker(primary=primary, cache=cache)
     except Exception as exc:
         return ResilientRanker(
             primary=None,
+            cache=cache,
             initial_warning=(
                 "Gemini initialization failed, so the local fallback ranker was used. "
                 + format_provider_diagnostic(
@@ -1565,14 +1897,15 @@ def _build_gemini_ranker_from_env() -> ResilientRanker:
         )
 
 
-def _build_openai_ranker_from_env() -> ResilientRanker:
-    api_key = os.getenv("OPENAI_API_KEY")
-    base_url = os.getenv("OPENAI_BASE_URL")
-    model_name = os.getenv("OPENAI_MODEL", "gpt-5.2-mini")
+def _build_openai_ranker_from_settings(settings: Settings, cache: SemanticCache) -> ResilientRanker:
+    api_key = settings.openai_api_key
+    base_url = settings.openai_base_url
+    model_name = settings.openai_model
 
     if not api_key:
         return ResilientRanker(
             primary=None,
+            cache=cache,
             initial_warning=(
                 "OpenAI mode is not configured because OPENAI_API_KEY is missing, "
                 "so the local fallback ranker was used. "
@@ -1587,6 +1920,7 @@ def _build_openai_ranker_from_env() -> ResilientRanker:
     if not base_url:
         return ResilientRanker(
             primary=None,
+            cache=cache,
             initial_warning=(
                 "OpenAI mode is not configured because OPENAI_BASE_URL is missing, "
                 "so the local fallback ranker was used. "
@@ -1604,10 +1938,11 @@ def _build_openai_ranker_from_env() -> ResilientRanker:
             model_name=model_name,
             base_url=base_url,
         )
-        return ResilientRanker(primary=primary)
+        return ResilientRanker(primary=primary, cache=cache)
     except Exception as exc:
         return ResilientRanker(
             primary=None,
+            cache=cache,
             initial_warning=(
                 "OpenAI initialization failed, so the local fallback ranker was used. "
                 + format_provider_diagnostic(
@@ -1620,13 +1955,22 @@ def _build_openai_ranker_from_env() -> ResilientRanker:
         )
 
 
-def build_ranker_from_env(provider_name: str) -> ResilientRanker:
-    normalized_provider = provider_name.strip().casefold()
+def build_ranker_from_env(
+    provider_name: str | None = None,
+    *,
+    settings: Settings | None = None,
+) -> ResilientRanker:
+    settings = settings or Settings(_env_file=None)
+    normalized_provider = (provider_name or settings.semantris_llm_provider).strip().casefold()
+    cache = build_semantic_cache(settings)
+
+    if settings.semantris_use_fake_ranker:
+        return ResilientRanker(primary=FakeRanker(), cache=cache)
 
     if normalized_provider == "gemini":
-        return _build_gemini_ranker_from_env()
+        return _build_gemini_ranker_from_settings(settings, cache)
     if normalized_provider == "openai":
-        return _build_openai_ranker_from_env()
+        return _build_openai_ranker_from_settings(settings, cache)
 
     raise ValueError(
         "Unsupported SEMANTRIS_LLM_PROVIDER. Expected 'gemini' or 'openai'."

@@ -57,7 +57,7 @@ describe("syncStageMetrics", () => {
         danger_zone_size: 4,
         danger_zone_words: ["b", "c", "d", "e"],
         target_word: "c",
-      },
+      }
     );
 
     expect(towerStage.style.getPropertyValue("--danger-zone-height")).toBe("188px");
@@ -74,7 +74,7 @@ describe("syncStageMetrics", () => {
         danger_zone_size: 0,
         danger_zone_words: [],
         target_word: null,
-      },
+      }
     );
 
     expect(towerStage.style.getPropertyValue("--danger-zone-height")).toBe("0px");

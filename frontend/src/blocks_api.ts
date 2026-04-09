@@ -1,5 +1,5 @@
-import type { ErrorResponse } from "./types";
 import type { BlocksStateResponse, BlocksTurnResponse } from "./blocks_types";
+import type { ErrorResponse } from "./types";
 
 function parseErrorMessage(payload: unknown): string | null {
   if (payload && typeof payload === "object" && "error" in payload) {

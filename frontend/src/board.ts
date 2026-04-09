@@ -2,15 +2,11 @@ import type { GameElements } from "./dom";
 import type { BoardState } from "./types";
 import { dangerWordsFromBoard } from "./utils";
 
-export function applyWordClasses(
-  element: HTMLElement,
-  word: string,
-  boardState: BoardState,
-): void {
+export function applyWordClasses(element: HTMLElement, word: string, boardState: BoardState): void {
   const dangerWords = new Set(
     boardState.danger_zone_words.length
       ? boardState.danger_zone_words
-      : dangerWordsFromBoard(boardState.board, boardState.danger_zone_size),
+      : dangerWordsFromBoard(boardState.board, boardState.danger_zone_size)
   );
 
   element.className = "word-chip";
@@ -36,7 +32,7 @@ export function createWordElement(word: string, boardState: BoardState): HTMLDiv
 export function renderBoard(
   elements: Pick<GameElements, "tower">,
   board: string[],
-  boardState: BoardState,
+  boardState: BoardState
 ): void {
   if (!board.length) {
     elements.tower.innerHTML = '<div class="empty-state">Tower cleared. Start a fresh run.</div>';
@@ -57,7 +53,7 @@ function resolveNumericPixels(value: string): number {
 
 export function syncStageMetrics(
   elements: Pick<GameElements, "tower" | "towerStage" | "dangerZone">,
-  boardState: BoardState,
+  boardState: BoardState
 ): void {
   const dangerRows = Math.max(0, boardState.danger_zone_size);
   const towerStyles = window.getComputedStyle(elements.tower);

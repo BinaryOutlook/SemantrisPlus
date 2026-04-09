@@ -49,10 +49,10 @@ function syncButtons(buttons: HTMLButtonElement[], activeTheme: ThemeOption): vo
 
 export function initThemeControls(
   documentRef: Document = document,
-  windowRef: Window = window,
+  windowRef: Window = window
 ): void {
   const buttons = Array.from(
-    documentRef.querySelectorAll<HTMLButtonElement>("[data-theme-option]"),
+    documentRef.querySelectorAll<HTMLButtonElement>("[data-theme-option]")
   );
 
   if (!buttons.length) {

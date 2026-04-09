@@ -6,7 +6,7 @@ export async function flashPrimaryCell(
   elements: Pick<BlocksElements, "blocksGrid">,
   primaryCell: number,
   duration: number,
-  prefersReducedMotion: boolean,
+  prefersReducedMotion: boolean
 ): Promise<void> {
   if (prefersReducedMotion) {
     return;
@@ -27,7 +27,7 @@ export async function flashPrimaryCell(
       {
         duration,
         easing: "cubic-bezier(0.22, 1, 0.36, 1)",
-      },
+      }
     )
     .finished.catch(() => undefined);
 }
@@ -36,7 +36,7 @@ export async function fadeOutBlockCells(
   elements: Pick<BlocksElements, "blocksGrid">,
   removedCells: number[],
   duration: number,
-  prefersReducedMotion: boolean,
+  prefersReducedMotion: boolean
 ): Promise<void> {
   if (!removedCells.length || prefersReducedMotion) {
     return;
@@ -56,9 +56,9 @@ export async function fadeOutBlockCells(
             duration,
             easing: "cubic-bezier(0.19, 1, 0.22, 1)",
             fill: "forwards",
-          },
+          }
         )
-        .finished.catch(() => undefined),
+        .finished.catch(() => undefined)
     );
 
   if (animations.length) {
@@ -75,7 +75,7 @@ export async function animateBlocksGridTransition(
     duration?: number;
     spawnDuration?: number;
   } = {},
-  prefersReducedMotion: boolean,
+  prefersReducedMotion: boolean
 ): Promise<void> {
   if (prefersReducedMotion) {
     renderBlocksGrid(elements, nextCells, state);
@@ -139,9 +139,9 @@ export async function animateBlocksGridTransition(
               {
                 duration,
                 easing: "cubic-bezier(0.22, 1, 0.36, 1)",
-              },
+              }
             )
-            .finished.catch(() => undefined),
+            .finished.catch(() => undefined)
         );
       }
     } else if (spawnedWords.has(word)) {
@@ -155,9 +155,9 @@ export async function animateBlocksGridTransition(
             {
               duration: spawnDuration,
               easing: "cubic-bezier(0.16, 1, 0.3, 1)",
-            },
+            }
           )
-          .finished.catch(() => undefined),
+          .finished.catch(() => undefined)
       );
     }
   });

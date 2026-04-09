@@ -3,11 +3,7 @@ import type { ClientState } from "./state";
 import type { GameState, StatusTone } from "./types";
 import { formatElapsed } from "./utils";
 
-export function setBusy(
-  elements: GameElements,
-  clientState: ClientState,
-  nextBusy: boolean,
-): void {
+export function setBusy(elements: GameElements, clientState: ClientState, nextBusy: boolean): void {
   clientState.busy = nextBusy;
   elements.body.classList.toggle("is-busy", nextBusy);
 
@@ -21,7 +17,7 @@ export function setBusy(
 export function setStatus(
   elements: Pick<GameElements, "statusBanner">,
   message: string,
-  tone: StatusTone = "neutral",
+  tone: StatusTone = "neutral"
 ): void {
   elements.statusBanner.textContent = message;
   elements.statusBanner.className = "status-banner";
@@ -38,7 +34,7 @@ export function setStatus(
 function startTimer(
   elements: Pick<GameElements, "timer">,
   clientState: ClientState,
-  startedAtMs: number,
+  startedAtMs: number
 ): void {
   if (clientState.timerHandle !== null) {
     window.clearInterval(clientState.timerHandle);
@@ -54,7 +50,7 @@ function stopTimer(
   elements: Pick<GameElements, "timer">,
   clientState: ClientState,
   startedAtMs: number,
-  endedAtMs: number | null,
+  endedAtMs: number | null
 ): void {
   if (clientState.timerHandle !== null) {
     window.clearInterval(clientState.timerHandle);
@@ -65,13 +61,10 @@ function stopTimer(
 }
 
 function setGameOverModal(
-  elements: Pick<
-    GameElements,
-    "body" | "gameOverModal" | "gameOverTitle" | "gameOverMessage"
-  >,
+  elements: Pick<GameElements, "body" | "gameOverModal" | "gameOverTitle" | "gameOverMessage">,
   isOpen: boolean,
   title = "You won.",
-  message = "",
+  message = ""
 ): void {
   elements.body.classList.toggle("has-game-over-modal", isOpen);
   elements.gameOverModal.hidden = !isOpen;
@@ -87,10 +80,27 @@ function setGameOverModal(
   elements.gameOverMessage.textContent = message;
 }
 
+function buildPersistenceMessage(state: GameState): string {
+  const persistence = state.persistence;
+  if (!persistence.run_saved && !persistence.best_run) {
+    return "";
+  }
+
+  if (persistence.is_new_best) {
+    return " New local best.";
+  }
+
+  if (persistence.best_run) {
+    return ` Local best: ${persistence.best_run.score}.`;
+  }
+
+  return "";
+}
+
 export function updateHud(
   elements: GameElements,
   clientState: ClientState,
-  state: GameState,
+  state: GameState
 ): void {
   clientState.currentState = state;
 
@@ -118,14 +128,9 @@ export function updateHud(
     const gameOverTitle = state.game_result === "loss" ? "Run over." : "You won.";
     const gameOverMessage =
       state.game_result === "loss"
-        ? `The run ended in ${elements.timer.textContent}. Start a new game to try again.`
-        : `You cleared the tower in ${elements.timer.textContent}. Start a new game to play again.`;
-    setGameOverModal(
-      elements,
-      true,
-      gameOverTitle,
-      gameOverMessage,
-    );
+        ? `The run ended in ${elements.timer.textContent}. Start a new game to try again.${buildPersistenceMessage(state)}`
+        : `You cleared the tower in ${elements.timer.textContent}. Start a new game to play again.${buildPersistenceMessage(state)}`;
+    setGameOverModal(elements, true, gameOverTitle, gameOverMessage);
     elements.submitButton.textContent = state.game_result === "loss" ? "Run Over" : "Run Complete";
     elements.submitButton.disabled = true;
     elements.clueInput.disabled = true;

@@ -19,6 +19,7 @@ __pycache__/
 .coverage.*
 htmlcov/
 coverage/
+test-results/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/

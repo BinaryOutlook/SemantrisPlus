@@ -55,7 +55,10 @@ export function resolveBlocksElements(documentRef: Document = document): BlocksE
     gameOverModal: requireElement("game-over-modal", documentRef),
     gameOverTitle: requireElement("game-over-title", documentRef),
     gameOverMessage: requireElement("game-over-message", documentRef),
-    gameOverNewGameButton: requireElement("game-over-new-game-button", documentRef) as HTMLButtonElement,
+    gameOverNewGameButton: requireElement(
+      "game-over-new-game-button",
+      documentRef
+    ) as HTMLButtonElement,
     clueForm: requireElement("clue-form", documentRef) as HTMLFormElement,
     clueInput: requireElement("clue-input", documentRef) as HTMLInputElement,
     submitButton: requireElement("submit-button", documentRef) as HTMLButtonElement,
