@@ -118,9 +118,9 @@ This repo supports two remote ranking modes: Gemini through Google’s Gen AI SD
 
 ## Project Status
 
-Current status: `v0.3.1` active prototype with a modular Flask backend, a typed frontend client, OpenAI/Gemini-compatible ranking, and a three-theme UI system with manual light, dark, and Cupertino switching.
+Current status: strengthened local prototype with a modular Flask backend, a typed frontend client, OpenAI/Gemini-compatible ranking, local run persistence, deterministic browser tests, and a three-theme UI system with manual light, dark, and Cupertino switching.
 
-The current frontend iteration packet is `PRDs/v0.3.1/`, which documents the Cupertino theme pass and its source references in `PRDs/references/v0.3.1-cupertino-source-packet/`.
+The current planning packet is `PRDs/v0.5/`, which defines the HMAS readiness and architecture modernization pass. The most recent completed infrastructure packet is `PRDs/v0.4/`, and the Cupertino frontend theme packet remains in `PRDs/v0.3.1/`.
 
 What is already in place:
 
@@ -133,16 +133,19 @@ What is already in place:
 - a shared theme controller with manual light/dark/Cupertino switching across the landing page and the game
 - a polished light mode, a flatter surface-led dark mode, and a Cupertino theme with a more restrained product-style shell
 - frontend type-checking and Vitest coverage for key browser-side logic
-- fallback ranking path for resilience
-- automated tests for gameplay rules, API behavior, and provider fallback behavior
+- fake-ranker support for deterministic browser tests
+- semantic caching, semantic fallback, and heuristic fallback paths for resilience
+- local SQLAlchemy run persistence and best-score metadata
+- automated tests for gameplay rules, API behavior, provider fallback behavior, frontend DOM behavior, and browser flows
 
 What is still unfinished:
 
+- HMAS-ready ownership boundaries for future parallel agents
 - final game feel polish
 - richer end-of-run UX
 - broader frontend test coverage across full interaction flows
-- leaderboard or persistence systems
-- stronger fallback ranking quality
+- richer leaderboard and run-history surfaces
+- stronger semantic fallback quality and observability
 - model selection tuning across Gemini and OpenAI-compatible providers
 
 ## Architecture
@@ -201,6 +204,12 @@ SemantrisPlus/
 │   ├── v0.3.1/
 │   │   ├── v0.3.1.md      # Cupertino frontend iteration PRD
 │   │   └── v0.3.1-demo.html # Cupertino design target for implementation
+│   ├── v0.4/
+│   │   ├── v0.4.md        # Technical strengthening iteration PRD
+│   │   └── v0.4-demo.html # Technical readiness reference
+│   ├── v0.5/
+│   │   ├── v0.5.md        # HMAS readiness and architecture modernization PRD
+│   │   └── v0.5-demo.html # HMAS command-board reference
 ├── docs/
 │   ├── README.md          # Documentation map and placement rules
 │   ├── PRD.md             # Foundation product requirements document
@@ -267,7 +276,8 @@ SemantrisPlus/
 ### 1. Install dependencies
 
 ```bash
-python3 -m pip install -r requirements.txt
+python3 -m venv .venv
+./.venv/bin/python -m pip install -r requirements.txt
 npm install
 ```
 
@@ -279,7 +289,7 @@ Create a `.env` file in the project root based on the starter template is also a
 
 ```bash
 npm run build
-python3 app.py
+./.venv/bin/python app.py
 ```
 
 Open [http://127.0.0.1:5001](http://127.0.0.1:5001), then launch `Iteration Mode` from the landing page.
@@ -300,18 +310,22 @@ For a normal local play session:
 
 ```bash
 npm run build
-python3 app.py
+./.venv/bin/python app.py
 ```
 
 For a validation pass before or after changes:
 
 ```bash
+npm run build
 npm run check:frontend
 npm run lint
 npm run test:frontend
-python3 -m unittest discover -s tests
+./.venv/bin/python -m unittest discover -s tests
 npm run test:e2e
 ```
+
+If you are not using the project virtualenv, run the Python test command with
+the interpreter where `requirements.txt` is installed.
 
 ## Configuration
 
@@ -402,12 +416,16 @@ Persistence is intentionally local and lightweight:
 ### Run tests
 
 ```bash
+npm run build
 npm run check:frontend
 npm run lint
 npm run test:frontend
-python3 -m unittest discover -s tests
+./.venv/bin/python -m unittest discover -s tests
 npm run test:e2e
 ```
+
+If you are not using the project virtualenv, run the Python test command with
+the interpreter where `requirements.txt` is installed.
 
 ### Frontend commands
 
@@ -421,7 +439,9 @@ npm run test:e2e
 
 - `docs/README.md`: documentation map and rules for where new Markdown files belong
 - `PRDs/README.md`: repeatable version-folder workflow for major iterations
-- `PRDs/v0.3.1/`: current canonical iteration packet
+- `PRDs/v0.5/`: current HMAS readiness and architecture modernization planning packet
+- `PRDs/v0.4/`: completed technical strengthening packet
+- `PRDs/v0.3.1/`: Cupertino frontend theme packet
 - `docs/PRD.md`: stable product direction, scope, and engineering guardrails
 - `docs/briefs/project-brief.md`: product brief for future contractors
 - `docs/history/releases/v0.1-structural-cleanup.md`: implementation note for the structural cleanup release

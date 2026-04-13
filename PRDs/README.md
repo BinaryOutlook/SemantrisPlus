@@ -30,8 +30,12 @@ Reference folders may also exist for imported inspiration material or rough sour
 
 ## Current active planning folders
 
-- `PRDs/v0.3.1/`
-- `PRDs/v0.4/`
+- `PRDs/v0.5/`: HMAS readiness and architecture modernization packet
+
+## Recent implemented or reference planning folders
+
+- `PRDs/v0.3.1/`: Cupertino frontend theme packet
+- `PRDs/v0.4/`: technical strengthening packet for settings, semantic resilience, persistence, Playwright, and tooling
 
 ## Reference-only source folder
 

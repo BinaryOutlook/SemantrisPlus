@@ -8,6 +8,10 @@ The format is inspired by Keep a Changelog, adapted for this repo's pace and sco
 
 ## [Unreleased]
 
+### Added
+
+- Added the `PRDs/v0.5/` HMAS readiness planning packet with five-platoon ownership, Shadow Striker specialization, phased execution, task breakdown, checkpoints, risks, and OC decision questions.
+
 ### Changed
 
 - Reorganized project documentation into purpose-based folders under `docs/` so briefs, decisions, proposals, and release notes no longer sit as dangling Markdown files.

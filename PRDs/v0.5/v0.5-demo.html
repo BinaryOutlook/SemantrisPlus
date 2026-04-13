@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Semantris Plus v0.5 HMAS Command Board</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f7f8fa;
+        --ink: #1b1f24;
+        --muted: #5f6b76;
+        --panel: #ffffff;
+        --panel-alt: #eef3f1;
+        --line: #cbd5dc;
+        --green: #176c57;
+        --red: #a43b3f;
+        --gold: #876408;
+        --blue: #255f99;
+        --violet: #6a4d8f;
+        --shadow: 0 12px 32px rgba(23, 32, 42, 0.08);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: var(--ink);
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(247, 248, 250, 0.92)),
+          repeating-linear-gradient(
+            90deg,
+            rgba(37, 95, 153, 0.05) 0,
+            rgba(37, 95, 153, 0.05) 1px,
+            transparent 1px,
+            transparent 48px
+          );
+      }
+
+      .page {
+        width: min(1200px, calc(100vw - 32px));
+        margin: 0 auto;
+        padding: 28px 0 48px;
+      }
+
+      .hero,
+      .section,
+      .platoon,
+      .checkpoint {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        box-shadow: var(--shadow);
+      }
+
+      .hero {
+        display: grid;
+        gap: 18px;
+        padding: 28px;
+      }
+
+      .eyebrow {
+        margin: 0;
+        color: var(--green);
+        font-size: 0.78rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        margin-bottom: 0;
+        max-width: 12ch;
+        font-size: clamp(2.6rem, 6vw, 5.7rem);
+        line-height: 0.94;
+        letter-spacing: 0;
+      }
+
+      .hero-copy {
+        max-width: 76ch;
+        color: var(--muted);
+        font-size: 1.03rem;
+        line-height: 1.7;
+      }
+
+      .chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .chip {
+        padding: 8px 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel-alt);
+        color: var(--ink);
+        font-weight: 700;
+      }
+
+      .sections {
+        display: grid;
+        gap: 18px;
+        margin-top: 18px;
+      }
+
+      .section {
+        padding: 22px;
+      }
+
+      .section h2 {
+        margin-bottom: 10px;
+        font-size: 1.45rem;
+      }
+
+      .command-map {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+      }
+
+      .platoon-grid {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .platoon {
+        min-height: 230px;
+        padding: 16px;
+        box-shadow: none;
+      }
+
+      .platoon h3 {
+        margin-bottom: 8px;
+        font-size: 1rem;
+      }
+
+      .platoon p,
+      .section p,
+      .checkpoint p,
+      li {
+        color: var(--muted);
+        line-height: 1.58;
+      }
+
+      .platoon ul,
+      .checkpoint ul {
+        margin: 12px 0 0;
+        padding-left: 18px;
+      }
+
+      .platoon:nth-child(1) {
+        border-top: 5px solid var(--green);
+      }
+
+      .platoon:nth-child(2) {
+        border-top: 5px solid var(--blue);
+      }
+
+      .platoon:nth-child(3) {
+        border-top: 5px solid var(--gold);
+      }
+
+      .platoon:nth-child(4) {
+        border-top: 5px solid var(--red);
+      }
+
+      .platoon:nth-child(5) {
+        border-top: 5px solid var(--violet);
+      }
+
+      .layer-map {
+        display: grid;
+        gap: 10px;
+      }
+
+      .layer {
+        display: grid;
+        grid-template-columns: 180px 1fr;
+        gap: 14px;
+        align-items: center;
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fbfcfd;
+      }
+
+      .layer strong {
+        color: var(--ink);
+      }
+
+      .phase-line {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .checkpoint {
+        padding: 16px;
+        box-shadow: none;
+      }
+
+      .checkpoint strong {
+        display: block;
+        margin-bottom: 8px;
+      }
+
+      .warning {
+        border-left: 5px solid var(--red);
+        background: #fffafa;
+      }
+
+      .success {
+        border-left: 5px solid var(--green);
+        background: #f6fbf8;
+      }
+
+      .footer {
+        margin-top: 18px;
+        padding: 16px 18px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--ink);
+        color: #ffffff;
+      }
+
+      .footer p {
+        margin: 0;
+        color: rgba(255, 255, 255, 0.78);
+      }
+
+      @media (max-width: 980px) {
+        .command-map,
+        .platoon-grid,
+        .phase-line {
+          grid-template-columns: 1fr;
+        }
+
+        .layer {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+        <p class="eyebrow">v0.5 HMAS command board</p>
+        <h1>Make the codebase command-ready.</h1>
+        <p class="hero-copy">
+          This reference shows the target operating model for the next iteration:
+          reduce command-post congestion, split ranking duties, clarify state contracts,
+          consolidate frontend infrastructure, and close with repeatable validation.
+        </p>
+        <div class="chip-row" aria-label="Iteration principles">
+          <span class="chip">No replatform</span>
+          <span class="chip">Five platoons</span>
+          <span class="chip">Stable gameplay</span>
+          <span class="chip">Checkpoint validation</span>
+          <span class="chip">Docs with code</span>
+        </div>
+      </section>
+
+      <div class="sections">
+        <section class="section">
+          <p class="eyebrow">Platoon deployment</p>
+          <h2>Five lanes, one battlefield.</h2>
+          <div class="platoon-grid">
+            <article class="platoon">
+              <h3>1. Core Gameplay</h3>
+              <p>Own mode rules, state contracts, scoring, seeded determinism, and pure logic tests.</p>
+              <ul>
+                <li>Blocks graph specialist</li>
+                <li>Restriction validator specialist</li>
+                <li>RNG specialist</li>
+              </ul>
+            </article>
+            <article class="platoon">
+              <h3>2. Semantic Intelligence</h3>
+              <p>Own providers, prompts, parsers, fallback policy, cache behavior, and diagnostics.</p>
+              <ul>
+                <li>Parser hardener</li>
+                <li>Provider SDK specialist</li>
+                <li>Cache-key specialist</li>
+              </ul>
+            </article>
+            <article class="platoon">
+              <h3>3. Web API</h3>
+              <p>Own Flask routing, session lifecycle, state serialization, persistence, and API contracts.</p>
+              <ul>
+                <li>Flask specialist</li>
+                <li>API contract specialist</li>
+                <li>SQLAlchemy specialist</li>
+              </ul>
+            </article>
+            <article class="platoon">
+              <h3>4. Frontend UX</h3>
+              <p>Own TypeScript clients, HUD, templates, animation surfaces, accessibility, and game feel.</p>
+              <ul>
+                <li>Controller specialist</li>
+                <li>Jinja partial specialist</li>
+                <li>Motion specialist</li>
+              </ul>
+            </article>
+            <article class="platoon">
+              <h3>5. QA and Docs</h3>
+              <p>Own CI, validation scripts, Playwright growth, dependency hygiene, and documentation closeout.</p>
+              <ul>
+                <li>CI specialist</li>
+                <li>E2E specialist</li>
+                <li>Docs quartermaster</li>
+              </ul>
+            </article>
+          </div>
+        </section>
+
+        <section class="section">
+          <p class="eyebrow">Architecture extraction map</p>
+          <h2>Pull responsibilities out of the two crowded command posts.</h2>
+          <div class="command-map">
+            <div class="layer-map">
+              <div class="layer">
+                <strong>app.py</strong>
+                <span>Keep route entry clear. Delegate vocabulary, session state, serializers, run lifecycle, and Blocks orchestration.</span>
+              </div>
+              <div class="layer">
+                <strong>Gameplay modules</strong>
+                <span>Keep mode rules separate. Strengthen contracts without forcing one generic state model.</span>
+              </div>
+              <div class="layer">
+                <strong>Persistence</strong>
+                <span>Keep run-store behavior optional, local-first, and explicit in serialized payloads.</span>
+              </div>
+            </div>
+            <div class="layer-map">
+              <div class="layer">
+                <strong>llm_client.py</strong>
+                <span>Turn into a smaller facade while semantic-engine modules own contracts, prompts, parsers, providers, fallback, and factory logic.</span>
+              </div>
+              <div class="layer">
+                <strong>frontend/src</strong>
+                <span>Share API, timer, modal, and persistence helpers while preserving mode-specific controller readability.</span>
+              </div>
+              <div class="layer">
+                <strong>templates</strong>
+                <span>Extract repeated head, theme, topbar, and modal markup only where it makes pages easier to read.</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section">
+          <p class="eyebrow">Execution phases</p>
+          <h2>Advance by checkpoint, not by hope.</h2>
+          <div class="phase-line">
+            <article class="checkpoint">
+              <strong>Phase 1</strong>
+              <p>Decompose backend command-post responsibilities while preserving routes.</p>
+            </article>
+            <article class="checkpoint">
+              <strong>Phase 2</strong>
+              <p>Split semantic engine responsibilities behind a compatibility facade.</p>
+            </article>
+            <article class="checkpoint">
+              <strong>Phase 3</strong>
+              <p>Strengthen backend state contracts and persistence behavior tests.</p>
+            </article>
+            <article class="checkpoint">
+              <strong>Phase 4</strong>
+              <p>Consolidate frontend API, HUD, modal, timer, and template infrastructure.</p>
+            </article>
+            <article class="checkpoint">
+              <strong>Phase 5</strong>
+              <p>Add CI, dependency hygiene notes, README updates, and final PRD change log.</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section success">
+          <p class="eyebrow">Definition of ready</p>
+          <h2>The game stays playable after every checkpoint.</h2>
+          <p>
+            Required closeout: backend tests, frontend build, typecheck, Vitest, Biome,
+            and Playwright all pass. Documentation reflects any durable ownership changes.
+          </p>
+        </section>
+
+        <section class="section warning">
+          <p class="eyebrow">Primary hazard</p>
+          <h2>Do not send multiple agents into the same crowded file.</h2>
+          <p>
+            The Theater Commander must sequence edits to `app.py` and `llm_client.py`.
+            Parallelism begins after ownership boundaries are extracted and tests are green.
+          </p>
+        </section>
+      </div>
+
+      <footer class="footer">
+        <p>
+          v0.5 succeeds when Semantris Plus can receive five coordinated agents without
+          losing route stability, ranking safety, frontend clarity, or documentation discipline.
+        </p>
+      </footer>
+    </main>
+  </body>
+</html>
